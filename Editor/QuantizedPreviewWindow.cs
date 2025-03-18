@@ -14,7 +14,7 @@ namespace SplashEdit.EditorCode
         private Texture2D vramTexture; // VRAM representation of the texture
         private List<VRAMPixel> clut; // Color Lookup Table (CLUT), stored as a 1D list
         private ushort[] indexedPixelData; // Indexed pixel data for VRAM storage
-        private PSXBPP bpp;
+        private PSXBPP bpp = PSXBPP.TEX_4BIT;
         private readonly int previewSize = 256;
 
         [MenuItem("Window/Quantized Preview")]

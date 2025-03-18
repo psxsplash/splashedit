@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -274,6 +275,16 @@ namespace SplashEdit.RuntimeCode
 
             return vramTexture;
 
+        }
+        /// <summary>
+        /// Check if we need to update stored texture
+        /// </summary>
+        /// <param name="bitDepth">new settings for color bit depth</param>
+        /// <param name="texture">new texture</param>
+        /// <returns>return true if sored texture is different from a new one</returns>
+        internal bool NeedUpdate(PSXBPP bitDepth, Texture2D texture)
+        {
+            return BitDepth != bitDepth || texture.GetInstanceID() != texture.GetInstanceID();
         }
     }
 }

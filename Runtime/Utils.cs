@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 
 namespace SplashEdit.RuntimeCode
@@ -39,6 +41,44 @@ namespace SplashEdit.RuntimeCode
         public Rect ToUnityRect()
         {
             return new Rect(X, Y, Width, Height);
+        }
+    }
+
+
+    public static class Utils
+    {
+        private static string _psxDataPath = "Assets/PSXData.asset";
+
+        public static (Rect, Rect) BufferForResolution(Vector2 selectedResolution, bool verticalLayout, Vector2 offset = default)
+        {
+            if (offset == default)
+            {
+                offset = Vector2.zero;
+            }
+            Rect buffer1 = new Rect(offset.x, offset.y, selectedResolution.x, selectedResolution.y);
+            Rect buffer2 = verticalLayout ? new Rect(offset.x, 256, selectedResolution.x, selectedResolution.y)
+                                          : new Rect(offset.x + selectedResolution.x, offset.y, selectedResolution.x, selectedResolution.y);
+            return (buffer1, buffer2);
+        }
+
+        /// <summary>
+        /// Loads stored PSX data from the asset.
+        /// </summary>
+        public static PSXData LoadData(out Vector2 selectedResolution, out bool dualBuffering, out bool verticalLayout, out List<ProhibitedArea> prohibitedAreas)
+        {
+            var _psxData = AssetDatabase.LoadAssetAtPath<PSXData>(_psxDataPath);
+            if (!_psxData)
+            {
+                _psxData = ScriptableObject.CreateInstance<PSXData>();
+                AssetDatabase.CreateAsset(_psxData, _psxDataPath);
+                AssetDatabase.SaveAssets();
+            }
+
+            selectedResolution = _psxData.OutputResolution;
+            dualBuffering = _psxData.DualBuffering;
+            verticalLayout = _psxData.VerticalBuffering;
+            prohibitedAreas = _psxData.ProhibitedAreas;
+            return _psxData;
         }
     }
 }

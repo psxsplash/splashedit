@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using SplashEdit.RuntimeCode;
 using Unity.Collections;
 using UnityEditor;
@@ -13,6 +14,7 @@ namespace SplashEdit.EditorCode
     {
         private const int VramWidth = 1024;
         private const int VramHeight = 512;
+        private static readonly Vector2 MinSize = new Vector2(800, 600);
         private List<ProhibitedArea> prohibitedAreas = new List<ProhibitedArea>();
         private Vector2 scrollPosition;
         private Texture2D vramImage;
@@ -22,8 +24,6 @@ namespace SplashEdit.EditorCode
         private Color bufferColor1 = new Color(1, 0, 0, 0.5f);
         private Color bufferColor2 = new Color(0, 1, 0, 0.5f);
         private Color prohibitedColor = new Color(1, 0, 0, 0.3f);
-
-        private static string _psxDataPath = "Assets/PSXData.asset";
         private PSXData _psxData;
 
         private static readonly Vector2[] resolutions =
@@ -33,14 +33,15 @@ namespace SplashEdit.EditorCode
         new Vector2(368, 240), new Vector2(368, 480),
         new Vector2(512, 240), new Vector2(512, 480),
         new Vector2(640, 240), new Vector2(640, 480)
-    };
+        };
+        private static string[] resolutionsStrings => resolutions.Select(c => $"{c.x}x{c.y}").ToArray();
 
         [MenuItem("Window/VRAM Editor")]
         public static void ShowWindow()
         {
             VRAMEditorWindow window = GetWindow<VRAMEditorWindow>("VRAM Editor");
             // Set minimum window dimensions.
-            window.minSize = new Vector2(1600, 600);
+            window.minSize = MinSize;
         }
 
         private void OnEnable()
@@ -53,9 +54,9 @@ namespace SplashEdit.EditorCode
             blackPixels.Dispose();
 
             // Ensure minimum window size is applied.
-            this.minSize = new Vector2(800, 600);
+            this.minSize = MinSize;
 
-            LoadData();
+            _psxData = Utils.LoadData(out selectedResolution, out dualBuffering, out verticalLayout, out prohibitedAreas);
         }
 
         /// <summary>
@@ -117,9 +118,7 @@ namespace SplashEdit.EditorCode
             }
 
             // Define framebuffer regions based on selected resolution and layout.
-            Rect buffer1 = new Rect(0, 0, selectedResolution.x, selectedResolution.y);
-            Rect buffer2 = verticalLayout ? new Rect(0, 256, selectedResolution.x, selectedResolution.y)
-                                          : new Rect(selectedResolution.x, 0, selectedResolution.x, selectedResolution.y);
+            (Rect buffer1, Rect buffer2) = Utils.BufferForResolution(selectedResolution, verticalLayout);
 
             List<Rect> framebuffers = new List<Rect> { buffer1 };
             if (dualBuffering)
@@ -162,12 +161,11 @@ namespace SplashEdit.EditorCode
             GUILayout.Label("VRAM Editor", EditorStyles.boldLabel);
 
             // Dropdown for resolution selection.
-            selectedResolution = resolutions[EditorGUILayout.Popup("Resolution", System.Array.IndexOf(resolutions, selectedResolution),
-                new string[] { "256x240", "256x480", "320x240", "320x480", "368x240", "368x480", "512x240", "512x480", "640x240", "640x480" })];
+            selectedResolution = resolutions[EditorGUILayout.Popup("Resolution", System.Array.IndexOf(resolutions, selectedResolution), resolutionsStrings)];
 
             // Check resolution constraints for dual buffering.
-            bool canDBHorizontal = selectedResolution[0] * 2 <= 1024;
-            bool canDBVertical = selectedResolution[1] * 2 <= 512;
+            bool canDBHorizontal = selectedResolution.x * 2 <= VramWidth;
+            bool canDBVertical = selectedResolution.y * 2 <= VramHeight;
 
             if (canDBHorizontal || canDBVertical)
             {
@@ -240,9 +238,7 @@ namespace SplashEdit.EditorCode
             EditorGUI.DrawPreviewTexture(vramRect, vramImage, null, ScaleMode.ScaleToFit, 0, 0, ColorWriteMask.All);
 
             // Draw framebuffer overlays.
-            Rect buffer1 = new Rect(vramRect.x, vramRect.y, selectedResolution.x, selectedResolution.y);
-            Rect buffer2 = verticalLayout ? new Rect(vramRect.x, 256, selectedResolution.x, selectedResolution.y)
-                                          : new Rect(vramRect.x + selectedResolution.x, vramRect.y, selectedResolution.x, selectedResolution.y);
+            (Rect buffer1, Rect buffer2) = Utils.BufferForResolution(selectedResolution, verticalLayout, vramRect.min);
 
             EditorGUI.DrawRect(buffer1, bufferColor1);
             GUI.Label(new Rect(buffer1.center.x - 40, buffer1.center.y - 10, 120, 20), "Framebuffer A", EditorStyles.boldLabel);
@@ -261,25 +257,6 @@ namespace SplashEdit.EditorCode
             }
 
             GUILayout.EndHorizontal();
-        }
-
-        /// <summary>
-        /// Loads stored PSX data from the asset.
-        /// </summary>
-        private void LoadData()
-        {
-            _psxData = AssetDatabase.LoadAssetAtPath<PSXData>(_psxDataPath);
-            if (!_psxData)
-            {
-                _psxData = CreateInstance<PSXData>();
-                AssetDatabase.CreateAsset(_psxData, _psxDataPath);
-                AssetDatabase.SaveAssets();
-            }
-
-            selectedResolution = _psxData.OutputResolution;
-            dualBuffering = _psxData.DualBuffering;
-            verticalLayout = _psxData.VerticalBuffering;
-            prohibitedAreas = _psxData.ProhibitedAreas;
         }
 
         /// <summary>

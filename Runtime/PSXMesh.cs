@@ -104,26 +104,28 @@ namespace SplashEdit.RuntimeCode
             // Compute the final shaded color by multiplying the light color by the intensity.
             Color shadedColor = lightColor * lightIntensity;
 
+            static short clampPosition(float v) => (short)(Mathf.Clamp(v, -4f, 3.999f) * 4096);
+            static byte clamp0255(float v) => (byte)(Mathf.Clamp(v, 0, 255));
             PSXVertex psxVertex = new PSXVertex
             {
                 // Convert position to fixed-point, clamping values to a defined range.
-                vx = (short)(Mathf.Clamp(vertex.x, -4f, 3.999f) * 4096),
-                vy = (short)(Mathf.Clamp(-vertex.y, -4f, 3.999f) * 4096),
-                vz = (short)(Mathf.Clamp(vertex.z, -4f, 3.999f) * 4096),
+                vx = clampPosition(vertex.x),
+                vy = clampPosition(-vertex.y),
+                vz = clampPosition(vertex.z),
 
                 // Convert normals to fixed-point.
-                nx = (short)(Mathf.Clamp(normal.x, -4f, 3.999f) * 4096),
-                ny = (short)(Mathf.Clamp(-normal.y, -4f, 3.999f) * 4096),
-                nz = (short)(Mathf.Clamp(normal.z, -4f, 3.999f) * 4096),
+                nx = clampPosition(normal.x),
+                ny = clampPosition(-normal.y),
+                nz = clampPosition(normal.z),
 
                 // Map UV coordinates to a byte range after scaling based on texture dimensions.
-                u = (byte)(Mathf.Clamp((uv.x * (textureWidth - 1)), 0, 255)),
-                v = (byte)(Mathf.Clamp(((1.0f - uv.y) * (textureHeight - 1)), 0, 255)),
+                u = clamp0255(uv.x * (textureWidth - 1)),
+                v = clamp0255((1.0f - uv.y) * (textureHeight - 1)),
 
                 // Convert the computed color to a byte range.
-                r = (byte)(Mathf.Clamp(shadedColor.r * 255, 0, 255)),
-                g = (byte)(Mathf.Clamp(shadedColor.g * 255, 0, 255)),
-                b = (byte)(Mathf.Clamp(shadedColor.b * 255, 0, 255))
+                r = clamp0255(shadedColor.r * 255),
+                g = clamp0255(shadedColor.g * 255),
+                b = clamp0255(shadedColor.b * 255)
             };
 
             return psxVertex;
