@@ -118,6 +118,16 @@ namespace SplashEdit.RuntimeCode
 
             return texture2D;
         }
+
+        public PSXTexture2D GetTexture(int index)
+        {
+            if (index >= 0 && index < Textures.Count)
+            {
+                return Textures[index];
+            }
+            return null;
+        }
+
         /// <summary>
         /// Converts the object's mesh into a PlayStation-compatible mesh.
         /// </summary>

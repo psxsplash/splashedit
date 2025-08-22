@@ -74,8 +74,9 @@ namespace SplashEdit.RuntimeCode
                 allTextures.AddRange(obj.Textures);
             }
 
-            // List to track unique textures.
+            // List to track unique textures and their indices
             List<PSXTexture2D> uniqueTextures = new List<PSXTexture2D>();
+            Dictionary<(int, PSXBPP), int> textureToIndexMap = new Dictionary<(int, PSXBPP), int>();
 
             // Group textures by bit depth (highest first).
             var texturesByBitDepth = allTextures
@@ -101,10 +102,12 @@ namespace SplashEdit.RuntimeCode
                 // Process each texture in descending order of area.
                 foreach (var texture in group.OrderByDescending(tex => tex.QuantizedWidth * tex.Height))
                 {
-                    // Remove duplicate textures
-                    if (uniqueTextures.Any(tex => tex.OriginalTexture.GetInstanceID() == texture.OriginalTexture.GetInstanceID() && tex.BitDepth == texture.BitDepth))
+                    var textureKey = (texture.OriginalTexture.GetInstanceID(), texture.BitDepth);
+
+                    // Check if we've already processed this texture
+                    if (textureToIndexMap.TryGetValue(textureKey, out int existingIndex))
                     {
-                        // Skip packing this texture – it will be replaced later.
+                        // This texture is a duplicate, skip packing but remember the mapping
                         continue;
                     }
 
@@ -120,20 +123,64 @@ namespace SplashEdit.RuntimeCode
                             continue;
                         }
                     }
+
+                    // Add to unique textures and map
+                    int newIndex = uniqueTextures.Count;
                     uniqueTextures.Add(texture);
+                    textureToIndexMap[textureKey] = newIndex;
                 }
             }
 
-            // Now update every exporter so that duplicate textures reference the unique instance.
+            // Now update every exporter and their meshes to use the correct texture indices
             foreach (var obj in objects)
             {
+                // Create a mapping from old texture indices to new indices for this object
+                Dictionary<int, int> oldToNewIndexMap = new Dictionary<int, int>();
+                List<PSXTexture2D> newTextures = new List<PSXTexture2D>();
+
                 for (int i = 0; i < obj.Textures.Count; i++)
                 {
-                    var unique = uniqueTextures.FirstOrDefault(tex => tex.OriginalTexture.GetInstanceID() == obj.Textures[i].OriginalTexture.GetInstanceID() &&
-                                                                      tex.BitDepth == obj.Textures[i].BitDepth);
-                    if (unique != null)
+                    var textureKey = (obj.Textures[i].OriginalTexture.GetInstanceID(), obj.Textures[i].BitDepth);
+                    if (textureToIndexMap.TryGetValue(textureKey, out int newIndex))
                     {
-                        obj.Textures[i] = unique;
+                        oldToNewIndexMap[i] = newIndex;
+
+                        // Only add to new textures list if not already present
+                        var texture = uniqueTextures[newIndex];
+                        if (!newTextures.Contains(texture))
+                        {
+                            newTextures.Add(texture);
+                        }
+                    }
+                }
+
+                // Replace the exporter's texture list with the deduplicated list
+                obj.Textures = newTextures;
+
+                // Update all triangles in the mesh to use the new texture indices
+                if (obj.Mesh != null && obj.Mesh.Triangles != null)
+                {
+                    for (int i = 0; i < obj.Mesh.Triangles.Count; i++)
+                    {
+                        var tri = obj.Mesh.Triangles[i];
+                        if (oldToNewIndexMap.TryGetValue(tri.TextureIndex, out int newGlobalIndex))
+                        {
+                            // Find the index in the new texture list
+                            var texture = uniqueTextures[newGlobalIndex];
+                            int finalIndex = newTextures.IndexOf(texture);
+
+                            // Create a new Tri with the updated TextureIndex
+                            var updatedTri = new Tri
+                            {
+                                v0 = tri.v0,
+                                v1 = tri.v1,
+                                v2 = tri.v2,
+                                TextureIndex = finalIndex
+                            };
+
+                            // Replace the tri in the list
+                            obj.Mesh.Triangles[i] = updatedTri;
+                        }
                     }
                 }
             }

@@ -320,7 +320,7 @@ namespace SplashEdit.RuntimeCode
 
                     foreach (Tri tri in exporter.Mesh.Triangles)
                     {
-                        int expander = 16 / ((int)tri.Texture.BitDepth);
+                        int expander = 16 / ((int)exporter.GetTexture(tri.TextureIndex).BitDepth);
                         // Write vertices coordinates
                         foreachVertexDo(tri, (v) => writeVertexPosition(v));
 
@@ -331,19 +331,19 @@ namespace SplashEdit.RuntimeCode
                         foreachVertexDo(tri, (v) => writeVertexColor(v));
 
                         // Write UVs for each vertex, adjusting for texture packing
-                        foreachVertexDo(tri, (v) => writeVertexUV(v, tri.Texture, expander));
+                        foreachVertexDo(tri, (v) => writeVertexUV(v, exporter.GetTexture(tri.TextureIndex), expander));
 
                         writer.Write((ushort)0); // padding
 
 
                         TPageAttr tpage = new TPageAttr();
-                        tpage.SetPageX(tri.Texture.TexpageX);
-                        tpage.SetPageY(tri.Texture.TexpageY);
-                        tpage.Set(tri.Texture.BitDepth.ToColorMode());
+                        tpage.SetPageX(exporter.GetTexture(tri.TextureIndex).TexpageX);
+                        tpage.SetPageY(exporter.GetTexture(tri.TextureIndex).TexpageY);
+                        tpage.Set(exporter.GetTexture(tri.TextureIndex).BitDepth.ToColorMode());
                         tpage.SetDithering(true);
                         writer.Write((ushort)tpage.info);
-                        writer.Write((ushort)tri.Texture.ClutPackingX);
-                        writer.Write((ushort)tri.Texture.ClutPackingY);
+                        writer.Write((ushort)exporter.GetTexture(tri.TextureIndex).ClutPackingX);
+                        writer.Write((ushort)exporter.GetTexture(tri.TextureIndex).ClutPackingY);
                         writer.Write((ushort)0);
                     }
                 }
