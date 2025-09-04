@@ -28,7 +28,7 @@ namespace SplashEdit.RuntimeCode
         public PSXVertex v1;
         public PSXVertex v2;
 
-         public int TextureIndex;
+        public int TextureIndex;
         public readonly PSXVertex[] Vertexes => new PSXVertex[] { v0, v1, v2 };
     }
 
@@ -82,77 +82,176 @@ namespace SplashEdit.RuntimeCode
         /// <param name="textureHeight">Height of the texture (default is 256).</param>
         /// <param name="transform">Optional transform to convert vertices to world space.</param>
         /// <returns>A new PSXMesh containing the converted triangles.</returns>
-       public static PSXMesh CreateFromUnityRenderer(Renderer renderer, float GTEScaling, Transform transform, List<PSXTexture2D> textures)
-{
-    PSXMesh psxMesh = new PSXMesh { Triangles = new List<Tri>() };
-    Material[] materials = renderer.sharedMaterials;
-    Mesh mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
-
-    for (int submeshIndex = 0; submeshIndex < materials.Length; submeshIndex++)
-    {
-        int[] submeshTriangles = mesh.GetTriangles(submeshIndex);
-        Material material = materials[submeshIndex];
-        Texture2D texture = material.mainTexture as Texture2D;
-        
-        // Find texture index instead of the texture itself
-        int textureIndex = -1;
-        if (texture != null)
+        public static PSXMesh CreateFromUnityRenderer(Renderer renderer, float GTEScaling, Transform transform, List<PSXTexture2D> textures)
         {
-            for (int i = 0; i < textures.Count; i++)
+            PSXMesh psxMesh = new PSXMesh { Triangles = new List<Tri>() };
+            Material[] materials = renderer.sharedMaterials;
+            Mesh mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
+
+            for (int submeshIndex = 0; submeshIndex < materials.Length; submeshIndex++)
             {
-                if (textures[i].OriginalTexture == texture)
+                int[] submeshTriangles = mesh.GetTriangles(submeshIndex);
+                Material material = materials[submeshIndex];
+                Texture2D texture = material.mainTexture as Texture2D;
+
+                // Find texture index instead of the texture itself
+                int textureIndex = -1;
+                if (texture != null)
                 {
-                    textureIndex = i;
-                    break;
+                    for (int i = 0; i < textures.Count; i++)
+                    {
+                        if (textures[i].OriginalTexture == texture)
+                        {
+                            textureIndex = i;
+                            break;
+                        }
+                    }
+                }
+
+                if (textureIndex == -1)
+                {
+                    continue;
+                }
+
+                // Get mesh data arrays
+                mesh.RecalculateNormals();
+                Vector3[] vertices = mesh.vertices;
+                Vector3[] normals = mesh.normals;
+                Vector3[] smoothNormals = RecalculateSmoothNormals(mesh);
+                Vector2[] uv = mesh.uv;
+
+                PSXVertex convertData(int index)
+                {
+                    Vector3 v = Vector3.Scale(vertices[index], transform.lossyScale);
+                    Vector3 wv = transform.TransformPoint(vertices[index]);
+                    Vector3 wn = transform.TransformDirection(smoothNormals[index]).normalized;
+                    Color c = PSXLightingBaker.ComputeLighting(wv, wn);
+                    return ConvertToPSXVertex(v, GTEScaling, normals[index], uv[index], textures[textureIndex]?.Width, textures[textureIndex]?.Height, c);
+                }
+
+                for (int i = 0; i < submeshTriangles.Length; i += 3)
+                {
+                    int vid0 = submeshTriangles[i];
+                    int vid1 = submeshTriangles[i + 1];
+                    int vid2 = submeshTriangles[i + 2];
+
+                    Vector3 faceNormal = Vector3.Cross(vertices[vid1] - vertices[vid0], vertices[vid2] - vertices[vid0]).normalized;
+
+                    if (Vector3.Dot(faceNormal, normals[vid0]) < 0)
+                    {
+                        (vid1, vid2) = (vid2, vid1);
+                    }
+
+                    psxMesh.Triangles.Add(new Tri
+                    {
+                        v0 = convertData(vid0),
+                        v1 = convertData(vid1),
+                        v2 = convertData(vid2),
+                        TextureIndex = textureIndex
+                    });
                 }
             }
+
+            return psxMesh;
         }
 
-        if (textureIndex == -1)
+        public static PSXMesh CreateFromUnityMesh(Mesh mesh, Renderer renderer, float GTEScaling, Transform transform, List<PSXTexture2D> textures)
         {
-            continue;
-        }
+            PSXMesh psxMesh = new PSXMesh { Triangles = new List<Tri>() };
+            Material[] materials = renderer.sharedMaterials;
 
-        // Get mesh data arrays
-        mesh.RecalculateNormals();
-        Vector3[] vertices = mesh.vertices;
-        Vector3[] normals = mesh.normals;
-        Vector3[] smoothNormals = RecalculateSmoothNormals(mesh);
-        Vector2[] uv = mesh.uv;
-        
-        PSXVertex convertData(int index)
-        {
-            Vector3 v = Vector3.Scale(vertices[index], transform.lossyScale);
-            Vector3 wv = transform.TransformPoint(vertices[index]);
-            Vector3 wn = transform.TransformDirection(smoothNormals[index]).normalized;
-            Color c = PSXLightingBaker.ComputeLighting(wv, wn);
-            return ConvertToPSXVertex(v, GTEScaling, normals[index], uv[index], textures[textureIndex]?.Width, textures[textureIndex]?.Height, c);
-        }
-
-        for (int i = 0; i < submeshTriangles.Length; i += 3)
-        {
-            int vid0 = submeshTriangles[i];
-            int vid1 = submeshTriangles[i + 1];
-            int vid2 = submeshTriangles[i + 2];
-
-            Vector3 faceNormal = Vector3.Cross(vertices[vid1] - vertices[vid0], vertices[vid2] - vertices[vid0]).normalized;
-
-            if (Vector3.Dot(faceNormal, normals[vid0]) < 0)
+            // Ensure mesh has required data
+            if (mesh.normals == null || mesh.normals.Length == 0)
             {
-                (vid1, vid2) = (vid2, vid1);
+                mesh.RecalculateNormals();
             }
 
-            psxMesh.Triangles.Add(new Tri { 
-                v0 = convertData(vid0), 
-                v1 = convertData(vid1), 
-                v2 = convertData(vid2), 
-                TextureIndex = textureIndex 
-            });
-        }
-    }
+            if (mesh.uv == null || mesh.uv.Length == 0)
+            {
+                Vector2[] uvs = new Vector2[mesh.vertices.Length];
+                mesh.uv = uvs;
+            }
 
-    return psxMesh;
-}
+            // Precompute smooth normals for the entire mesh
+            Vector3[] smoothNormals = RecalculateSmoothNormals(mesh);
+
+            // Precompute world positions and normals for all vertices
+            Vector3[] worldVertices = new Vector3[mesh.vertices.Length];
+            Vector3[] worldNormals = new Vector3[mesh.normals.Length];
+
+            for (int i = 0; i < mesh.vertices.Length; i++)
+            {
+                worldVertices[i] = transform.TransformPoint(mesh.vertices[i]);
+                worldNormals[i] = transform.TransformDirection(mesh.normals[i]).normalized;
+            }
+
+            for (int submeshIndex = 0; submeshIndex < mesh.subMeshCount; submeshIndex++)
+            {
+                int materialIndex = Mathf.Min(submeshIndex, materials.Length - 1);
+                Material material = materials[materialIndex];
+                Texture2D texture = material.mainTexture as Texture2D;
+
+                // Find texture index
+                int textureIndex = -1;
+                if (texture != null)
+                {
+                    for (int i = 0; i < textures.Count; i++)
+                    {
+                        if (textures[i].OriginalTexture == texture)
+                        {
+                            textureIndex = i;
+                            break;
+                        }
+                    }
+                }
+
+                int[] submeshTriangles = mesh.GetTriangles(submeshIndex);
+
+                // Get mesh data arrays
+                Vector3[] vertices = mesh.vertices;
+                Vector3[] normals = mesh.normals;
+                Vector2[] uv = mesh.uv;
+
+                PSXVertex convertData(int index)
+                {
+                    Vector3 v = Vector3.Scale(vertices[index], transform.lossyScale);
+
+                    // Use precomputed world position and normal for consistent lighting
+                    Vector3 wv = worldVertices[index];
+                    Vector3 wn = worldNormals[index];
+
+                    // For split triangles, use the original vertex's lighting if possible
+                    Color c = PSXLightingBaker.ComputeLighting(wv, wn);
+
+                    return ConvertToPSXVertex(v, GTEScaling, normals[index], uv[index],
+                                            textures[textureIndex]?.Width, textures[textureIndex]?.Height, c);
+                }
+
+                for (int i = 0; i < submeshTriangles.Length; i += 3)
+                {
+                    int vid0 = submeshTriangles[i];
+                    int vid1 = submeshTriangles[i + 1];
+                    int vid2 = submeshTriangles[i + 2];
+
+                    Vector3 faceNormal = Vector3.Cross(vertices[vid1] - vertices[vid0], vertices[vid2] - vertices[vid0]).normalized;
+
+                    if (Vector3.Dot(faceNormal, normals[vid0]) < 0)
+                    {
+                        (vid1, vid2) = (vid2, vid1);
+                    }
+
+                    psxMesh.Triangles.Add(new Tri
+                    {
+                        v0 = convertData(vid0),
+                        v1 = convertData(vid1),
+                        v2 = convertData(vid2),
+                        TextureIndex = textureIndex
+                    });
+                }
+            }
+
+            return psxMesh;
+        }
 
         /// <summary>
         /// Converts a Unity vertex into a PSXVertex by applying fixed-point conversion, shading, and UV mapping.

@@ -32,6 +32,11 @@ namespace SplashEdit.RuntimeCode
         private Quaternion _playerRot;
         private float _playerHeight;
 
+        private BSP _bsp;
+
+        public bool PreviewBSP = true;
+        public int BSPPreviewDepth = 9999;
+
         public void Export()
         {
             _psxData = DataStorage.LoadData(out selectedResolution, out dualBuffering, out verticalLayout, out prohibitedAreas);
@@ -42,7 +47,7 @@ namespace SplashEdit.RuntimeCode
                 PSXObjectExporter exp = _exporters[i];
                 EditorUtility.DisplayProgressBar($"{nameof(PSXSceneExporter)}", $"Export {nameof(PSXObjectExporter)}", ((float)i) / _exporters.Length);
                 exp.CreatePSXTextures2D();
-                exp.CreatePSXMesh(GTEScaling);
+                exp.CreatePSXMesh(GTEScaling, true);
             }
 
             _navmeshes = FindObjectsByType<PSXNavMesh>(FindObjectsSortMode.None);
@@ -65,6 +70,9 @@ namespace SplashEdit.RuntimeCode
                 _playerHeight = player.PlayerHeight;
                 _playerRot = player.transform.rotation;
             }
+
+            _bsp = new BSP(_exporters.ToList());
+            _bsp.Build();
 
             ExportFile();
         }
@@ -450,6 +458,10 @@ namespace SplashEdit.RuntimeCode
             Vector3 cubeSize = new Vector3(8.0f * GTEScaling, 8.0f * GTEScaling, 8.0f * GTEScaling);
             Gizmos.color = Color.red;
             Gizmos.DrawWireCube(sceneOrigin, cubeSize);
+
+            if (_bsp == null || !PreviewBSP) return;
+            _bsp.DrawGizmos(BSPPreviewDepth);
+
         }
 
     }
