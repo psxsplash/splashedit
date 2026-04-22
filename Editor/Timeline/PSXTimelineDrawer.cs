@@ -198,7 +198,7 @@ namespace SplashEdit.EditorCode
             {
                 DrawEventLaneHeader(rect, ref y, "Audio Events", PSXEditorStyles.AccentMagenta, state);
             }
-            if (state.SkinAnimEvents != null && state.SkinAnimEvents.Count > 0)
+            if (state.SkinAnimEvents != null)
             {
                 DrawEventLaneHeader(rect, ref y, "Skin Anims", PSXEditorStyles.AccentGreen, state);
             }
@@ -298,7 +298,7 @@ namespace SplashEdit.EditorCode
                 DrawAudioEventLane(state, y, localRect);
                 y += PSXTimelineState.EventLaneHeight;
             }
-            if (state.SkinAnimEvents != null && state.SkinAnimEvents.Count > 0)
+            if (state.SkinAnimEvents != null)
             {
                 DrawSkinAnimEventLane(state, y, localRect);
                 y += PSXTimelineState.EventLaneHeight;
@@ -668,7 +668,7 @@ namespace SplashEdit.EditorCode
             }
 
             // Skin anim events
-            if (state.SkinAnimEvents != null && state.SkinAnimEvents.Count > 0)
+            if (state.SkinAnimEvents != null)
             {
                 if (localPos.y >= y && localPos.y < y + PSXTimelineState.EventLaneHeight)
                 {
@@ -705,7 +705,7 @@ namespace SplashEdit.EditorCode
 
             // Skip event lanes
             if (state.IsCutscene) y += PSXTimelineState.EventLaneHeight;
-            if (state.SkinAnimEvents != null && state.SkinAnimEvents.Count > 0) y += PSXTimelineState.EventLaneHeight;
+            if (state.SkinAnimEvents != null) y += PSXTimelineState.EventLaneHeight;
 
             // Add track row
             if (localPos.y >= y && localPos.y < y + PSXTimelineState.TrackHeight)

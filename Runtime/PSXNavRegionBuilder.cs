@@ -618,7 +618,8 @@ namespace SplashEdit.RuntimeCode
                 float cx = 0, cz = 0;
                 foreach (var v in reg.vertsXZ) { cx += v.x; cz += v.y; }
                 cx /= reg.vertsXZ.Count; cz /= reg.vertsXZ.Count;
-                float cy = EvalY(reg, new Vector2(cx, cz));
+                // The -0.01f below is to compensate for floating point errors
+                float cy = EvalY(reg, new Vector2(cx, cz)) - 0.01f; 
                 Vector3 centroid = new Vector3(cx, cy, cz);
 
                 foreach (var bounds in platformBounds)

@@ -162,6 +162,18 @@ namespace SplashEdit.EditorCode
             set => EditorPrefs.SetBool(Prefix + "RoomDebugOverlay", value);
         }
 
+        // --- Profiler Overlay ---
+        /// <summary>
+        /// When enabled, compiles the runtime with a per-frame profiler overlay
+        /// that renders a pie chart and timing breakdown on screen.
+        /// Passes PROFILER=1 to the native Makefile.
+        /// </summary>
+        public static bool ProfilerOverlay
+        {
+            get => EditorPrefs.GetBool(Prefix + "ProfilerOverlay", false);
+            set => EditorPrefs.SetBool(Prefix + "ProfilerOverlay", value);
+        }
+
         // --- Renderer sizes ---
         public static int OtSize
         {
@@ -215,7 +227,9 @@ namespace SplashEdit.EditorCode
                 "ResWidth", "ResHeight", "DualBuffering", "VerticalLayout",
                 "GTEScaling", "AutoValidate",
                 "LicenseFilePath", "ISOVolumeLabel",
-                "OtSize", "BumpSize"
+                "OtSize", "BumpSize",
+                "MemoryOverlay", "FpsOverlay", "RoomDebugOverlay", "ProfilerOverlay",
+                "CleanBuild"
             };
 
             foreach (string key in keys)

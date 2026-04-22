@@ -20,6 +20,12 @@ namespace SplashEdit.EditorCode
         {
             SplashControlPanel.ShowWindow();
         }
+
+        [MenuItem(MENU_ROOT + "About SplashEdit", false, 100)]
+        public static void OpenAboutWindow()
+        {
+            PSXAboutWindow.ShowWindow();
+        }
         
         // ───── GameObject Menu ─────
         

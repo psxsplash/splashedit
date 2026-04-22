@@ -176,7 +176,14 @@ namespace SplashEdit.RuntimeCode
             psxTex._maxColors = (int)Mathf.Pow(2, (int)bitDepth);
 
             TextureQuantizer.QuantizedResult result = TextureQuantizer.Quantize(inputTexture, psxTex._maxColors);
-
+            int targetCount = 4 - (result.Palette.Count % 4);
+            if (targetCount != 0)
+            {
+                // Align palette (CLUT) to 4 bits by padding it with a black color
+                int prevCount = result.Palette.Count;
+                result.Palette.AddRange(new Vector3[targetCount]);
+            }
+            
             foreach (Vector3 color in result.Palette)
             {
                 Color pixel = new Color(color.x, color.y, color.z);

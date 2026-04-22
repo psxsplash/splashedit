@@ -268,7 +268,10 @@ namespace SplashEdit.EditorCode
                 case KeyCode.Backspace:
                     if (!EditorGUIUtility.editingTextField)
                     {
-                        DeleteSelectedKeyframe();
+                        if (_state.SelectedEventType >= 0 && _state.SelectedEventIndex >= 0)
+                            DeleteSelectedEvent();
+                        else
+                            DeleteSelectedKeyframe();
                         e.Use();
                         Repaint();
                     }
@@ -443,7 +446,12 @@ namespace SplashEdit.EditorCode
             {
                 Vector2 localPos = e.mousePosition - new Vector2(_state.TrackHeaderRect.x, _state.TrackHeaderRect.y);
                 int hit = PSXTimelineDrawer.HitTestTrackHeader(_state, localPos);
-                if (hit >= 0)
+                if (hit == -1)
+                {
+                    ShowAddTrackMenu();
+                    e.Use();
+                }
+                else if (hit >= 0)
                 {
                     ShowTrackHeaderContextMenu(hit);
                     e.Use();
@@ -496,6 +504,8 @@ namespace SplashEdit.EditorCode
             var menu = new GenericMenu();
             float frame = _state.PixelXToFrame(localPos.x);
             int targetFrame = Mathf.Clamp(Mathf.RoundToInt(frame), 0, _state.DurationFrames);
+            var (eventType, _) = PSXTimelineDrawer.HitTestEvent(_state, localPos);
+            int eventLaneType = GetEventLaneTypeAtY(localPos.y);
 
             // Determine which track lane was clicked
             int trackIdx = Mathf.FloorToInt((localPos.y + _state.ScrollY) / PSXTimelineState.TrackHeight);
@@ -513,6 +523,48 @@ namespace SplashEdit.EditorCode
                         track.Keyframes.Sort((a, b) => a.Frame.CompareTo(b.Frame));
                         EditorUtility.SetDirty(_state.Clip);
                     }
+                });
+            }
+
+            if ((eventType == 0 || eventLaneType == 0) && _state.IsCutscene && _state.AudioEvents != null)
+            {
+                menu.AddItem(new GUIContent($"Add Audio Event at frame {targetFrame}"), false, () =>
+                {
+                    Undo.RecordObject(_state.Clip, "Add Audio Event");
+                    _state.AudioEvents.Add(new PSXAudioEvent
+                    {
+                        Frame = targetFrame,
+                        ClipName = "",
+                        Volume = 128,
+                        Pan = 64
+                    });
+                    _state.AudioEvents.Sort((a, b) => a.Frame.CompareTo(b.Frame));
+                    _state.SelectedEventType = 0;
+                    _state.SelectedEventIndex = _state.AudioEvents.FindIndex(evt => evt.Frame == targetFrame);
+                    _state.SelectedTrackIndex = -1;
+                    _state.SelectedKeyframeIndex = -1;
+                    EditorUtility.SetDirty(_state.Clip);
+                });
+            }
+
+            if ((eventType == 1 || eventLaneType == 1) && _state.SkinAnimEvents != null)
+            {
+                menu.AddItem(new GUIContent($"Add Skin Anim Event at frame {targetFrame}"), false, () =>
+                {
+                    Undo.RecordObject(_state.Clip, "Add Skin Anim Event");
+                    _state.SkinAnimEvents.Add(new PSXSkinAnimEvent
+                    {
+                        Frame = targetFrame,
+                        TargetObjectName = "",
+                        ClipName = "",
+                        Loop = false
+                    });
+                    _state.SkinAnimEvents.Sort((a, b) => a.Frame.CompareTo(b.Frame));
+                    _state.SelectedEventType = 1;
+                    _state.SelectedEventIndex = _state.SkinAnimEvents.FindIndex(evt => evt.Frame == targetFrame);
+                    _state.SelectedTrackIndex = -1;
+                    _state.SelectedKeyframeIndex = -1;
+                    EditorUtility.SetDirty(_state.Clip);
                 });
             }
 
@@ -538,7 +590,33 @@ namespace SplashEdit.EditorCode
                 }
             }
 
+            if (_state.SelectedEventType >= 0 && _state.SelectedEventIndex >= 0)
+            {
+                menu.AddSeparator("");
+                menu.AddItem(new GUIContent("Delete Selected Event"), false, DeleteSelectedEvent);
+            }
+
             menu.ShowAsContext();
+        }
+
+        private int GetEventLaneTypeAtY(float localY)
+        {
+            float y = -_state.ScrollY + (_state.Tracks?.Count ?? 0) * PSXTimelineState.TrackHeight;
+
+            if (_state.IsCutscene)
+            {
+                if (localY >= y && localY < y + PSXTimelineState.EventLaneHeight)
+                    return 0;
+                y += PSXTimelineState.EventLaneHeight;
+            }
+
+            if (_state.SkinAnimEvents != null)
+            {
+                if (localY >= y && localY < y + PSXTimelineState.EventLaneHeight)
+                    return 1;
+            }
+
+            return -1;
         }
 
         private void ShowTrackHeaderContextMenu(int trackIdx)
@@ -700,6 +778,28 @@ namespace SplashEdit.EditorCode
                         _state.Tracks[ti].Keyframes.RemoveAt(ki);
                 }
                 _state.MultiSelection.Clear();
+                EditorUtility.SetDirty(_state.Clip);
+            }
+        }
+
+        private void DeleteSelectedEvent()
+        {
+            if (_state.SelectedEventType == 0 && _state.AudioEvents != null &&
+                _state.SelectedEventIndex >= 0 && _state.SelectedEventIndex < _state.AudioEvents.Count)
+            {
+                Undo.RecordObject(_state.Clip, "Delete Audio Event");
+                _state.AudioEvents.RemoveAt(_state.SelectedEventIndex);
+                _state.ClearSelection();
+                EditorUtility.SetDirty(_state.Clip);
+                return;
+            }
+
+            if (_state.SelectedEventType == 1 && _state.SkinAnimEvents != null &&
+                _state.SelectedEventIndex >= 0 && _state.SelectedEventIndex < _state.SkinAnimEvents.Count)
+            {
+                Undo.RecordObject(_state.Clip, "Delete Skin Anim Event");
+                _state.SkinAnimEvents.RemoveAt(_state.SelectedEventIndex);
+                _state.ClearSelection();
                 EditorUtility.SetDirty(_state.Clip);
             }
         }

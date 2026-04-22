@@ -72,6 +72,12 @@ namespace SplashEdit.EditorCode
         private string _currentTag = "";
         private bool _isSwitchingRelease;
 
+        // ───── Native status cache (avoid expensive checks every repaint) ─────
+        private bool _isGitAvailable;
+        private bool _isNativeRepoInstalled;
+        private double _nextNativeStatusRefreshTime;
+        private const double NativeStatusRefreshIntervalSec = 2.0;
+
         // PCdrv serial host instance (for real hardware file serving)
         private static PCdrvSerialHost _pcdrvHost;
 
@@ -106,6 +112,7 @@ namespace SplashEdit.EditorCode
         {
             SplashBuildPaths.EnsureDirectories();
             RefreshToolchainStatus();
+            RefreshNativeProjectStatus(force: true);
             LoadSceneList();
             LoadMusicList();
             _manualNativePath = SplashSettings.NativeProjectPath;
@@ -120,6 +127,7 @@ namespace SplashEdit.EditorCode
         private void OnFocus()
         {
             RefreshToolchainStatus();
+            RefreshNativeProjectStatus(force: true);
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -128,6 +136,12 @@ namespace SplashEdit.EditorCode
 
         private void OnGUI()
         {
+            // Run expensive shell/file checks at most every couple seconds.
+            if (_selectedTab == 0 && Event.current.type == EventType.Layout && !_isInstallingNative && !_isSwitchingRelease)
+            {
+                RefreshNativeProjectStatus(force: false);
+            }
+
             if (_isRunning && _pcdrvHost != null && !_pcdrvHost.IsRunning)
             {
                 StopAll();
@@ -228,7 +242,7 @@ namespace SplashEdit.EditorCode
             EditorGUILayout.BeginVertical(PSXEditorStyles.CardStyle);
 
             string currentPath = SplashBuildPaths.NativeSourceDir;
-            bool hasProject = !string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath);
+            bool hasProject = _hasNativeProject;
 
             // Status
             EditorGUILayout.BeginHorizontal();
@@ -251,7 +265,7 @@ namespace SplashEdit.EditorCode
             GUILayout.Label("Download from GitHub", PSXEditorStyles.SectionHeader);
 
             // Git availability check
-            if (!PSXSplashInstaller.IsGitAvailable())
+            if (!_isGitAvailable)
             {
                 EditorGUILayout.HelpBox(
                     "git is required to download the native project (submodules need recursive clone).\n" +
@@ -281,7 +295,7 @@ namespace SplashEdit.EditorCode
             EditorGUILayout.EndHorizontal();
 
             // Current version display (when installed)
-            if (PSXSplashInstaller.IsInstalled() && !string.IsNullOrEmpty(_currentTag))
+            if (_isNativeRepoInstalled && !string.IsNullOrEmpty(_currentTag))
             {
                 var prevColor = GUI.contentColor;
                 GUI.contentColor = PSXEditorStyles.Success;
@@ -291,12 +305,12 @@ namespace SplashEdit.EditorCode
 
             // Clone / Switch / Open buttons
             EditorGUILayout.BeginHorizontal();
-            if (!PSXSplashInstaller.IsInstalled())
+            if (!_isNativeRepoInstalled)
             {
                 // Not installed yet — show Clone button
                 EditorGUI.BeginDisabledGroup(
                     _isInstallingNative || _releaseDisplayNames.Length == 0 ||
-                    !PSXSplashInstaller.IsGitAvailable());
+                    !_isGitAvailable);
                 if (GUILayout.Button("Download Release", GUILayout.Width(130)))
                 {
                     CloneNativeProject();
@@ -308,7 +322,7 @@ namespace SplashEdit.EditorCode
                 // Already installed — show Switch and Open buttons
                 EditorGUI.BeginDisabledGroup(
                     _isSwitchingRelease || _isInstallingNative ||
-                    _releaseDisplayNames.Length == 0 || !PSXSplashInstaller.IsGitAvailable());
+                    _releaseDisplayNames.Length == 0 || !_isGitAvailable);
                 if (GUILayout.Button("Switch Release", EditorStyles.miniButton, GUILayout.Width(100)))
                 {
                     SwitchNativeRelease();
@@ -799,6 +813,10 @@ namespace SplashEdit.EditorCode
             SplashSettings.RoomDebugOverlay = EditorGUILayout.Toggle(
                 new GUIContent("Room Debug Overlay", "Render ALL room triangles in per-room colors on top of the scene for culling diagnosis"),
                 SplashSettings.RoomDebugOverlay);
+
+            SplashSettings.ProfilerOverlay = EditorGUILayout.Toggle(
+                new GUIContent("Profiler Overlay", "Show a per-frame pie chart with timing breakdown for major runtime systems"),
+                SplashSettings.ProfilerOverlay);
 
             SplashSettings.OtSize = EditorGUILayout.IntField(
                 new GUIContent("OT Size", "Ordering table entries. Lower = less RAM, shallower Z-sorting."),
@@ -1842,6 +1860,9 @@ namespace SplashEdit.EditorCode
             if (SplashSettings.RoomDebugOverlay)
                 buildArg += " ROOMDEBUG=1";
 
+            if (SplashSettings.ProfilerOverlay)
+                buildArg += " PROFILER=1";
+
             buildArg += $" OT_SIZE={SplashSettings.OtSize} BUMP_SIZE={SplashSettings.BumpSize}";
 
             // Use noparser Lua library when bytecode was pre-compiled
@@ -2423,6 +2444,17 @@ namespace SplashEdit.EditorCode
             _hasNativeProject = !string.IsNullOrEmpty(nativeDir) && Directory.Exists(nativeDir);
         }
 
+        private void RefreshNativeProjectStatus(bool force)
+        {
+            double now = EditorApplication.timeSinceStartup;
+            if (!force && now < _nextNativeStatusRefreshTime)
+                return;
+
+            _nextNativeStatusRefreshTime = now + NativeStatusRefreshIntervalSec;
+            _isGitAvailable = PSXSplashInstaller.IsGitAvailable();
+            _isNativeRepoInstalled = PSXSplashInstaller.IsInstalled();
+        }
+
         private async void InstallMIPS()
         {
             Log("Installing MIPS toolchain...", LogType.Log);
@@ -2619,6 +2651,7 @@ namespace SplashEdit.EditorCode
                     Log($"psxsplash {tag} downloaded successfully!", LogType.Log);
                     _nativeInstallStatus = "";
                     RefreshToolchainStatus();
+                    RefreshNativeProjectStatus(force: true);
                     RefreshCurrentTag();
                 }
                 else
@@ -2670,6 +2703,7 @@ namespace SplashEdit.EditorCode
                 {
                     Log($"Switched to {tag}.", LogType.Log);
                     _nativeInstallStatus = "";
+                    RefreshNativeProjectStatus(force: true);
                     RefreshCurrentTag();
                 }
                 else

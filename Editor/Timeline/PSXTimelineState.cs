@@ -146,6 +146,19 @@ namespace SplashEdit.EditorCode
         {
             Clip = clip;
             IsCutscene = clip is RuntimeCode.PSXCutsceneClip;
+
+            if (clip is RuntimeCode.PSXCutsceneClip cc)
+            {
+                if (cc.Tracks == null) cc.Tracks = new List<RuntimeCode.PSXCutsceneTrack>();
+                if (cc.AudioEvents == null) cc.AudioEvents = new List<RuntimeCode.PSXAudioEvent>();
+                if (cc.SkinAnimEvents == null) cc.SkinAnimEvents = new List<RuntimeCode.PSXSkinAnimEvent>();
+            }
+            else if (clip is RuntimeCode.PSXAnimationClip ac)
+            {
+                if (ac.Tracks == null) ac.Tracks = new List<RuntimeCode.PSXCutsceneTrack>();
+                if (ac.SkinAnimEvents == null) ac.SkinAnimEvents = new List<RuntimeCode.PSXSkinAnimEvent>();
+            }
+
             ClearSelection();
             PlayheadFrame = 0;
             IsPlaying = false;
