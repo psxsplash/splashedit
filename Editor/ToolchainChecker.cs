@@ -59,18 +59,23 @@ public static class ToolchainChecker
                         if (File.Exists(Path.Combine(dir, variant)))
                             return true;
             }
-            Process process = new Process
+            var psi = new ProcessStartInfo
             {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = command,
-                    Arguments = toolName,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
+                FileName = command,
+                Arguments = toolName,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
             };
+            if (Application.platform == RuntimePlatform.OSXEditor)
+            {
+                string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                string extra = $"/opt/homebrew/bin:/usr/local/bin:{home}/bin:{home}/mipsel-none-elf/bin";
+                string current = psi.Environment.ContainsKey("PATH") ? psi.Environment["PATH"] : "";
+                psi.Environment["PATH"] = $"{extra}:{current}";
+            }
+            Process process = new Process { StartInfo = psi };
 
             process.Start();
             string output = process.StandardOutput.ReadToEnd().Trim();

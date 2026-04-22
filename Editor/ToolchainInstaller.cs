@@ -9,13 +9,48 @@ namespace SplashEdit.EditorCode
 {
     /// <summary>
     /// Installs the MIPS cross-compiler toolchain and GNU Make.
-    /// Supports Windows and Linux only.
+    /// Auto-installs on Windows and Linux. Guides macOS users through manual setup.
     /// </summary>
     public static class ToolchainInstaller
     {
         private static bool _installing;
 
         public static string MipsVersion = "14.2.0";
+
+        public static bool HasXcodeCommandLineTools()
+        {
+            if (Application.platform != RuntimePlatform.OSXEditor) return true;
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "xcode-select",
+                    Arguments = "-p",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+                var proc = Process.Start(psi);
+                proc.WaitForExit();
+                return proc.ExitCode == 0;
+            }
+            catch { return false; }
+        }
+
+        public static void PromptXcodeInstall()
+        {
+            bool install = EditorUtility.DisplayDialog(
+                "macOS: Xcode Command Line Tools Required",
+                "Xcode Command Line Tools must be installed first.\n" +
+                "They provide GNU Make, Git, and other build essentials.\n\n" +
+                "Click Install to open the system installer.",
+                "Install", "Cancel");
+            if (install)
+            {
+                Process.Start("xcode-select", "--install");
+            }
+        }
 
         /// <summary>
         /// Runs an external process and waits for it to exit.
@@ -90,9 +125,69 @@ namespace SplashEdit.EditorCode
                     else
                         throw new Exception("Unsupported Linux distribution. Install mipsel-linux-gnu-gcc manually.");
                 }
+                else if (Application.platform == RuntimePlatform.OSXEditor)
+                {
+                    if (!HasXcodeCommandLineTools())
+                    {
+                        PromptXcodeInstall();
+                        return false;
+                    }
+                    // No prebuilt MIPS compiler exists for macOS. The pcsx-redux
+                    // project maintains formula files that build GCC from source.
+                    // brew-install-path is needed because Homebrew 4.6.4+ removed
+                    // support for installing from local .rb formula files directly.
+                    // The resulting "nikitabobko/local-tap" is a LOCAL directory on
+                    // the user's machine, not a GitHub repo — don't reference it
+                    // in install instructions.
+                    bool hasBrew = ToolchainChecker.IsToolAvailable("brew");
+                    string installScript =
+                        "brew install nikitabobko/tap/brew-install-path && " +
+                        "curl -LO https://raw.githubusercontent.com/grumpycoders/pcsx-redux/main/tools/macos-mips/mipsel-none-elf-binutils.rb && " +
+                        "curl -LO https://raw.githubusercontent.com/grumpycoders/pcsx-redux/main/tools/macos-mips/mipsel-none-elf-gcc.rb && " +
+                        "brew install-path ./mipsel-none-elf-binutils.rb && " +
+                        "brew install-path ./mipsel-none-elf-gcc.rb";
+                    if (hasBrew)
+                    {
+                        EditorUtility.DisplayDialog(
+                            "macOS: Install MIPS Cross-Compiler",
+                            "Paste this into Terminal (copied to clipboard):\n\n" +
+                            "  brew install nikitabobko/tap/brew-install-path\n" +
+                            "  curl -LO https://raw.githubusercontent.com/grumpycoders/\n" +
+                            "    pcsx-redux/main/tools/macos-mips/mipsel-none-elf-binutils.rb\n" +
+                            "  curl -LO https://raw.githubusercontent.com/grumpycoders/\n" +
+                            "    pcsx-redux/main/tools/macos-mips/mipsel-none-elf-gcc.rb\n" +
+                            "  brew install-path ./mipsel-none-elf-binutils.rb\n" +
+                            "  brew install-path ./mipsel-none-elf-gcc.rb\n\n" +
+                            "Builds GCC from source — expect 15-30 minutes.\n" +
+                            "Then click Refresh in the Dependencies tab.",
+                            "OK");
+                        GUIUtility.systemCopyBuffer = installScript;
+                    }
+                    else
+                    {
+                        EditorUtility.DisplayDialog(
+                            "macOS: Install Homebrew + MIPS Cross-Compiler",
+                            "Homebrew (the macOS package manager) is required.\n\n" +
+                            "Step 1 — Install Homebrew:\n" +
+                            "  /bin/bash -c \"$(curl -fsSL\n" +
+                            "    https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\n\n" +
+                            "Step 2 — Install the MIPS compiler (paste into Terminal):\n" +
+                            "  brew install nikitabobko/tap/brew-install-path\n" +
+                            "  curl -LO <grumpycoders pcsx-redux formula URLs>\n" +
+                            "  brew install-path ./mipsel-none-elf-binutils.rb\n" +
+                            "  brew install-path ./mipsel-none-elf-gcc.rb\n\n" +
+                            "Step 2 builds GCC from source — expect 15-30 minutes.\n" +
+                            "The Homebrew install command has been copied to your clipboard.\n" +
+                            "Then click Refresh in the Dependencies tab.",
+                            "OK");
+                        GUIUtility.systemCopyBuffer =
+                            "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"";
+                    }
+                    return false;
+                }
                 else
                 {
-                    throw new Exception("Only Windows and Linux are supported.");
+                    throw new Exception("Unsupported platform.");
                 }
                 return true;
             }
@@ -128,9 +223,13 @@ namespace SplashEdit.EditorCode
                 else
                     throw new Exception("Unsupported Linux distribution. Install 'make' manually.");
             }
+            else if (Application.platform == RuntimePlatform.OSXEditor)
+            {
+                PromptXcodeInstall();
+            }
             else
             {
-                throw new Exception("Only Windows and Linux are supported.");
+                throw new Exception("Unsupported platform.");
             }
         }
     }
