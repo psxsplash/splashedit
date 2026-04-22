@@ -15,5 +15,6 @@ namespace SplashEdit.RuntimeCode
         CameraH = 10,
         RumbleSmall = 11,
         RumbleLarge = 12,
+        ObjectUVOffset = 13,
     }
 }

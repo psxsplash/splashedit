@@ -181,6 +181,17 @@ namespace SplashEdit.EditorCode
                         EditorGUILayout.HelpBox("Note: large motor typically starts spinning at ~80-96. Values below may not produce vibration.", MessageType.Info);
                     break;
                 }
+                case PSXTrackType.ObjectUVOffset:
+                {
+                    EditorGUILayout.BeginHorizontal();
+                    EditorGUILayout.LabelField("U", GUILayout.Width(14));
+                    int u = EditorGUILayout.IntField(Mathf.Clamp(Mathf.RoundToInt(kf.Value.x), 0, 255), GUILayout.Width(40));
+                    EditorGUILayout.LabelField("V", GUILayout.Width(14));
+                    int v = EditorGUILayout.IntField(Mathf.Clamp(Mathf.RoundToInt(kf.Value.y), 0, 255), GUILayout.Width(40));
+                    EditorGUILayout.EndHorizontal();
+                    kf.Value = new Vector3(u, v, 0);
+                    break;
+                }
                 default:
                     kf.Value = EditorGUILayout.Vector3Field("Value", kf.Value);
                     break;

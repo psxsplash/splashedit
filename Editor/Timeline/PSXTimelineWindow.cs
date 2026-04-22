@@ -588,6 +588,8 @@ namespace SplashEdit.EditorCode
                         () => AddTrack(PSXTrackType.ObjectRotation, objectName: n));
                     menu.AddItem(new GUIContent($"Object/{n}/Active"), false,
                         () => AddTrack(PSXTrackType.ObjectActive, objectName: n));
+                    menu.AddItem(new GUIContent($"Object/{n}/UV Offset"), false,
+                        () => AddTrack(PSXTrackType.ObjectUVOffset, objectName: n));
                 }
             }
             else

@@ -25,6 +25,7 @@ namespace SplashEdit.EditorCode
         private Dictionary<string, Vector3> _savedObjectPositions = new Dictionary<string, Vector3>();
         private Dictionary<string, Quaternion> _savedObjectRotations = new Dictionary<string, Quaternion>();
         private Dictionary<string, bool> _savedObjectActive = new Dictionary<string, bool>();
+        private Dictionary<string, Vector2> _savedObjectUVOffset = new Dictionary<string, Vector2>();
 
         // Audio preview
         private Dictionary<string, AudioClip> _audioClipCache = new Dictionary<string, AudioClip>();
@@ -52,6 +53,7 @@ namespace SplashEdit.EditorCode
             _savedObjectPositions.Clear();
             _savedObjectRotations.Clear();
             _savedObjectActive.Clear();
+            _savedObjectUVOffset.Clear();
             _hasSavedSceneView = false;
 
             // Save scene view camera (cutscene only)
@@ -85,6 +87,14 @@ namespace SplashEdit.EditorCode
                         _savedObjectPositions[track.ObjectName] = go.transform.position;
                         _savedObjectRotations[track.ObjectName] = go.transform.rotation;
                         _savedObjectActive[track.ObjectName] = go.activeSelf;
+                        if (go.GetComponent<MeshRenderer>() && go.GetComponent<PSXObjectExporter>())
+                        {
+                            int offsetMaterial = go.GetComponent<PSXObjectExporter>().UVOffsetMaterial;
+                            // Accessing them this way stops an error, but doesn't seem to be an issue elsewhere...
+                            List<Material> mats = new List<Material>();
+                            go.GetComponent<MeshRenderer>().GetMaterials(mats);
+                            _savedObjectUVOffset[track.ObjectName] = mats[offsetMaterial].mainTextureOffset;
+                        }
                     }
                 }
             }
@@ -121,8 +131,12 @@ namespace SplashEdit.EditorCode
                         _savedObjectPositions[objName] = se.transform.position;
                         _savedObjectRotations[objName] = se.transform.rotation;
                         _savedObjectActive[objName] = se.gameObject.activeSelf;
+                        if (se.GetComponent<SkinnedMeshRenderer>() && se.GetComponent<PSXObjectExporter>())
+                        {
+                            int offsetMaterial = se.GetComponent<PSXObjectExporter>().UVOffsetMaterial;
+                            _savedObjectUVOffset[objName] = se.GetComponent<SkinnedMeshRenderer>().materials[offsetMaterial].mainTextureOffset;
+                        }
                     }
-
                     if (_skinAnimatorCache.ContainsKey(objName)) continue;
 
                     Animator resolved = ResolveAnimatorForSkinExp(se);
@@ -170,10 +184,24 @@ namespace SplashEdit.EditorCode
                     go.transform.rotation = _savedObjectRotations[kvp.Key];
                 if (_savedObjectActive.ContainsKey(kvp.Key))
                     go.SetActive(_savedObjectActive[kvp.Key]);
+                if (_savedObjectUVOffset.ContainsKey(kvp.Key))
+                {
+                    if (go.GetComponent<MeshRenderer>())
+                    {
+                        int offsetMaterial = go.GetComponent<PSXObjectExporter>().UVOffsetMaterial;
+                        go.GetComponent<MeshRenderer>().materials[offsetMaterial].mainTextureOffset = _savedObjectUVOffset[kvp.Key];
+                    }
+                    else if (go.GetComponent<SkinnedMeshRenderer>())
+                    {
+                        int offsetMaterial = go.GetComponent<PSXObjectExporter>().UVOffsetMaterial;
+                        go.GetComponent<SkinnedMeshRenderer>().materials[offsetMaterial].mainTextureOffset = _savedObjectUVOffset[kvp.Key];
+                    }
+                }
             }
             _savedObjectPositions.Clear();
             _savedObjectRotations.Clear();
             _savedObjectActive.Clear();
+            _savedObjectUVOffset.Clear();
 
             // Restore skinned mesh poses
             if (_animModeStarted && AnimationMode.InAnimationMode())
@@ -234,6 +262,24 @@ namespace SplashEdit.EditorCode
                         {
                             var go = GameObject.Find(track.ObjectName);
                             if (go != null) go.SetActive(val.x > 0.5f);
+                            break;
+                        }
+                        case PSXTrackType.ObjectUVOffset:
+                        {
+                            var go = GameObject.Find(track.ObjectName);
+                            if (go != null)
+                            {
+                                if (go.GetComponent<MeshRenderer>())
+                                {
+                                    int offsetMaterial = go.GetComponent<PSXObjectExporter>().UVOffsetMaterial;
+                                    go.GetComponent<MeshRenderer>().materials[offsetMaterial].mainTextureOffset = val / 256;
+                                }
+                                else if (go.GetComponent<SkinnedMeshRenderer>())
+                                {
+                                    int offsetMaterial = go.GetComponent<PSXObjectExporter>().UVOffsetMaterial;
+                                    go.GetComponent<SkinnedMeshRenderer>().materials[offsetMaterial].mainTextureOffset = val / 256;
+                                }
+                            }
                             break;
                         }
                         // UI tracks: no scene preview

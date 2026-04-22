@@ -17,6 +17,7 @@ namespace SplashEdit.EditorCode
         private SerializedProperty flatVertexColorProp;
         private SerializedProperty smoothNormalsProp;
         private SerializedProperty isPlatformProp;
+        private SerializedProperty uvOffsetMaterialProp;
 
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
@@ -36,6 +37,7 @@ namespace SplashEdit.EditorCode
             flatVertexColorProp = serializedObject.FindProperty("flatVertexColor");
             smoothNormalsProp = serializedObject.FindProperty("smoothNormals");
             isPlatformProp = serializedObject.FindProperty("isPlatform");
+            uvOffsetMaterialProp = serializedObject.FindProperty("uvOffsetMaterial");
 
             CacheMeshInfo();
         }
@@ -147,6 +149,7 @@ namespace SplashEdit.EditorCode
                 }
             }
 
+            EditorGUILayout.PropertyField(uvOffsetMaterialProp, new GUIContent("UV Offset Material"));
             EditorGUILayout.PropertyField(luaFileProp, new GUIContent("Lua Script"));
 
             if (luaFileProp.objectReferenceValue != null)
