@@ -438,8 +438,23 @@ namespace SplashEdit.EditorCode
             }
         }
         
+        // Consolas is Windows-only. Using it on macOS/Linux causes Unity to
+        // spam "Unable to load font face" warnings every frame.
+        public static string MonoFontName
+        {
+            get
+            {
+                switch (Application.platform)
+                {
+                    case RuntimePlatform.OSXEditor: return "Menlo";
+                    case RuntimePlatform.LinuxEditor: return "DejaVu Sans Mono";
+                    default: return "Consolas";
+                }
+            }
+        }
+
         #endregion
-        
+
         #region Drawing Helpers
         
         /// <summary>

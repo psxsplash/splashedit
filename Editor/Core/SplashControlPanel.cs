@@ -53,8 +53,12 @@ namespace SplashEdit.EditorCode
         private bool _hasRedux;
         private bool _hasNativeProject;
         private bool _hasPsxavenc;
+        private bool _hasPsxavencDeps;
+        private string _psxavencMissing = "";
         private bool _hasMkpsxiso;
         private string _reduxVersion = "";
+        private bool _hasXcodeCLT;
+        private bool _hasBrew;
 
         // ───── Native project installer ─────
         private bool _isInstallingNative;
@@ -393,39 +397,95 @@ namespace SplashEdit.EditorCode
 
             EditorGUILayout.BeginVertical(PSXEditorStyles.CardStyle);
 
+            bool isMac = Application.platform == RuntimePlatform.OSXEditor;
+
+            // GNU Make (before MIPS — it's a prerequisite for everything on macOS)
+            EditorGUILayout.BeginHorizontal();
+            DrawStatusIcon(_hasMake);
+            GUILayout.Label("GNU Make", GUILayout.Width(160));
+            GUILayout.FlexibleSpace();
+            if (_hasMake)
+            {
+                PSXEditorStyles.DrawStatusBadge("Ready", PSXEditorStyles.Success);
+            }
+            else if (isMac)
+            {
+                PSXEditorStyles.DrawStatusBadge("Needs setup", PSXEditorStyles.Warning);
+            }
+            else
+            {
+                if (GUILayout.Button("Install", PSXEditorStyles.SecondaryButton, GUILayout.Width(70)))
+                    InstallMake();
+            }
+            EditorGUILayout.EndHorizontal();
+
+            if (!_hasMake && isMac)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.HelpBox(
+                    "Xcode Command Line Tools are required.",
+                    MessageType.Info);
+                if (GUILayout.Button("Install", PSXEditorStyles.SecondaryButton,
+                    GUILayout.Width(60), GUILayout.Height(38)))
+                    ToolchainInstaller.PromptXcodeInstall();
+                EditorGUILayout.EndHorizontal();
+            }
+
+            PSXEditorStyles.DrawSeparator(2, 2);
+
             // MIPS Compiler
             EditorGUILayout.BeginHorizontal();
             DrawStatusIcon(_hasMIPS);
             GUILayout.Label("MIPS Cross-Compiler", GUILayout.Width(160));
             GUILayout.FlexibleSpace();
-            if (!_hasMIPS)
+            if (_hasMIPS)
+            {
+                PSXEditorStyles.DrawStatusBadge("Ready", PSXEditorStyles.Success);
+            }
+            else if (isMac && !_hasXcodeCLT)
+            {
+                PSXEditorStyles.DrawStatusBadge("Needs CLT", PSXEditorStyles.Warning);
+            }
+            else if (isMac && !_hasBrew)
+            {
+                PSXEditorStyles.DrawStatusBadge("Needs brew", PSXEditorStyles.Warning);
+            }
+            else if (isMac)
+            {
+                PSXEditorStyles.DrawStatusBadge("Needs setup", PSXEditorStyles.Warning);
+            }
+            else
             {
                 if (GUILayout.Button("Install", PSXEditorStyles.SecondaryButton, GUILayout.Width(70)))
                     InstallMIPS();
             }
-            else
-            {
-                PSXEditorStyles.DrawStatusBadge("Ready", PSXEditorStyles.Success);
-            }
             EditorGUILayout.EndHorizontal();
 
-            PSXEditorStyles.DrawSeparator(2, 2);
-
-            // GNU Make
-            EditorGUILayout.BeginHorizontal();
-            DrawStatusIcon(_hasMake);
-            GUILayout.Label("GNU Make", GUILayout.Width(160));
-            GUILayout.FlexibleSpace();
-            if (!_hasMake)
+            if (!_hasMIPS && isMac)
             {
-                if (GUILayout.Button("Install", PSXEditorStyles.SecondaryButton, GUILayout.Width(70)))
-                    InstallMake();
+                if (!_hasXcodeCLT)
+                {
+                    EditorGUILayout.HelpBox(
+                        "Install Xcode Command Line Tools first (see GNU Make above).",
+                        MessageType.Warning);
+                }
+                else if (!_hasBrew)
+                {
+                    DrawMacSetupHint(
+                        "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"",
+                        "Homebrew is required. Install it first, then click Refresh.");
+                }
+                else
+                {
+                    DrawMacSetupHint(
+                        "brew install nikitabobko/tap/brew-install-path && " +
+                        "curl -LO https://raw.githubusercontent.com/grumpycoders/pcsx-redux/main/tools/macos-mips/mipsel-none-elf-binutils.rb && " +
+                        "curl -LO https://raw.githubusercontent.com/grumpycoders/pcsx-redux/main/tools/macos-mips/mipsel-none-elf-gcc.rb && " +
+                        "brew install-path ./mipsel-none-elf-binutils.rb && " +
+                        "brew install-path ./mipsel-none-elf-gcc.rb",
+                        "Builds GCC from source — expect 15-30 minutes.");
+                }
             }
-            else
-            {
-                PSXEditorStyles.DrawStatusBadge("Ready", PSXEditorStyles.Success);
-            }
-            EditorGUILayout.EndHorizontal();
 
             PSXEditorStyles.DrawSeparator(2, 2);
 
@@ -452,16 +512,27 @@ namespace SplashEdit.EditorCode
             DrawStatusIcon(_hasPsxavenc);
             GUILayout.Label("psxavenc (Audio)", GUILayout.Width(160));
             GUILayout.FlexibleSpace();
-            if (!_hasPsxavenc)
+            if (_hasPsxavenc)
+            {
+                PSXEditorStyles.DrawStatusBadge("Installed", PSXEditorStyles.Success);
+            }
+            else if (!_hasPsxavencDeps && Application.platform == RuntimePlatform.OSXEditor)
+            {
+                PSXEditorStyles.DrawStatusBadge("Needs deps", PSXEditorStyles.Warning);
+            }
+            else
             {
                 if (GUILayout.Button("Download", PSXEditorStyles.SecondaryButton, GUILayout.Width(80)))
                     DownloadPsxavenc();
             }
-            else
-            {
-                PSXEditorStyles.DrawStatusBadge("Installed", PSXEditorStyles.Success);
-            }
             EditorGUILayout.EndHorizontal();
+
+            if (!_hasPsxavenc && !_hasPsxavencDeps && Application.platform == RuntimePlatform.OSXEditor)
+            {
+                DrawMacSetupHint(
+                    "brew install " + _psxavencMissing,
+                    "Install these first, then click Refresh. psxavenc will be built from source.");
+            }
 
             PSXEditorStyles.DrawSeparator(2, 2);
 
@@ -2243,6 +2314,23 @@ namespace SplashEdit.EditorCode
                 catch { }
             }
             _emulatorProcess = null;
+
+            // macOS: kill stale PCSX-Redux processes that outlived the wrapper
+            if (Application.platform == RuntimePlatform.OSXEditor)
+            {
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "pkill",
+                        Arguments = "-f \"PCSX-Redux.app/Contents/MacOS/PCSX-Redux\"",
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    Process.Start(psi)?.WaitForExit(2000);
+                }
+                catch { }
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -2266,10 +2354,23 @@ namespace SplashEdit.EditorCode
 
         private void RefreshToolchainStatus()
         {
+            bool isMac = Application.platform == RuntimePlatform.OSXEditor;
+
+            if (isMac)
+            {
+                _hasXcodeCLT = ToolchainInstaller.HasXcodeCommandLineTools();
+                _hasBrew = ToolchainChecker.IsToolAvailable("brew");
+            }
+            else
+            {
+                _hasXcodeCLT = true;
+                _hasBrew = true;
+            }
+
             _hasMIPS = ToolchainChecker.IsToolAvailable(
-                Application.platform == RuntimePlatform.WindowsEditor
-                    ? "mipsel-none-elf-gcc"
-                    : "mipsel-linux-gnu-gcc");
+                Application.platform == RuntimePlatform.LinuxEditor
+                    ? "mipsel-linux-gnu-gcc"
+                    : "mipsel-none-elf-gcc");
 
             _hasMake = ToolchainChecker.IsToolAvailable("make");
 
@@ -2278,6 +2379,11 @@ namespace SplashEdit.EditorCode
             _reduxVersion = _hasRedux ? "Installed" : "";
 
             _hasPsxavenc = PSXAudioConverter.IsInstalled();
+
+            if (isMac && !_hasPsxavenc)
+                _hasPsxavencDeps = PSXAudioConverter.CheckMacOSBuildDeps(out _psxavencMissing);
+            else
+                _hasPsxavencDeps = true;
 
             _hasMkpsxiso = MkpsxisoDownloader.IsInstalled();
 
@@ -2690,6 +2796,41 @@ namespace SplashEdit.EditorCode
             isOpen = EditorGUILayout.Foldout(isOpen, title, true, PSXEditorStyles.SectionHeader);
             EditorGUILayout.EndHorizontal();
             return isOpen;
+        }
+
+        private static GUIStyle _hintMonoStyle;
+
+        private void DrawMacSetupHint(string command, string note)
+        {
+            EditorGUILayout.Space(2);
+            EditorGUILayout.HelpBox("Run in Terminal:", MessageType.Info);
+
+            EditorGUILayout.BeginHorizontal();
+            if (_hintMonoStyle == null)
+            {
+                _hintMonoStyle = new GUIStyle(EditorStyles.textField)
+                {
+                    font = Font.CreateDynamicFontFromOSFont(PSXEditorStyles.MonoFontName, 12),
+                    fontSize = 12,
+                    fontStyle = FontStyle.Bold,
+                    padding = new RectOffset(6, 6, 4, 4)
+                };
+            }
+            EditorGUILayout.SelectableLabel(command, _hintMonoStyle,
+                GUILayout.Height(22), GUILayout.ExpandWidth(true));
+            if (GUILayout.Button("Copy", EditorStyles.miniButton, GUILayout.Width(42)))
+                GUIUtility.systemCopyBuffer = command;
+            EditorGUILayout.EndHorizontal();
+
+            if (!string.IsNullOrEmpty(note))
+            {
+                var prev = GUI.color;
+                GUI.color = PSXEditorStyles.TextMuted;
+                GUILayout.Label(note, EditorStyles.miniLabel);
+                GUI.color = prev;
+            }
+
+            EditorGUILayout.Space(2);
         }
 
         private void DrawStatusIcon(bool ok)

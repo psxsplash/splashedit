@@ -207,7 +207,7 @@ namespace SplashEdit.EditorCode
             {
                 _monoStyle = new GUIStyle(EditorStyles.label)
                 {
-                    font = Font.CreateDynamicFontFromOSFont("Consolas", 12),
+                    font = Font.CreateDynamicFontFromOSFont(PSXEditorStyles.MonoFontName, 12),
                     fontSize = 11,
                     richText = false,
                     wordWrap = _wrapLines,
