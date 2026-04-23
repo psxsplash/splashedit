@@ -353,7 +353,7 @@ namespace SplashEdit.RuntimeCode
 
                     // Component indices (8 bytes)
                     writer.Write(interactableIndices.TryGetValue(exporter, out int interactIdx) ? (ushort)interactIdx : (ushort)0xFFFF);
-                    writer.Write((ushort)0xFFFF); // _reserved0 (legacy healthIndex)
+                    writer.Write((ushort)0);      // uv offset (legacy healthIndex)
                     writer.Write((uint)0);        // eventMask (runtime-only, must be zero)
 
                     // World-space AABB (24 bytes)
@@ -546,6 +546,12 @@ namespace SplashEdit.RuntimeCode
                         WriteVertexColor(writer, tri.v1);
                         WriteVertexColor(writer, tri.v2);
 
+                        ushort flags = 0;
+                        if (exporter.UVOffsetMaterial == tri.TextureIndex)
+                        {
+                            flags |= 0x1;
+                        }
+
                         if (tri.IsUntextured)
                         {
                             // Zero UVs
@@ -559,7 +565,7 @@ namespace SplashEdit.RuntimeCode
                             writer.Write((ushort)0xFFFF);
                             writer.Write((ushort)0);
                             writer.Write((ushort)0);
-                            writer.Write((ushort)0);
+                            writer.Write(flags);
                         }
                         else
                         {
@@ -579,7 +585,7 @@ namespace SplashEdit.RuntimeCode
                             writer.Write((ushort)tpage.info);
                             writer.Write((ushort)tex.ClutPackingX);
                             writer.Write((ushort)tex.ClutPackingY);
-                            writer.Write((ushort)0); // padding
+                            writer.Write(flags); // flags
                         }
                     }
                 }

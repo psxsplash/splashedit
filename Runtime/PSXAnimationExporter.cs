@@ -212,6 +212,13 @@ namespace SplashEdit.RuntimeCode
                                 writer.Write((short)0);
                                 break;
                             }
+                            case PSXTrackType.ObjectUVOffset:
+                            {
+                                writer.Write((short)Mathf.Clamp(Mathf.RoundToInt(kf.Value.x), 0, 255));
+                                writer.Write((short)Mathf.Clamp(Mathf.RoundToInt(kf.Value.y), 0, 255));
+                                writer.Write((short)0);
+                                break;
+                            }
                             case PSXTrackType.UICanvasVisible:
                             case PSXTrackType.UIElementVisible:
                             {

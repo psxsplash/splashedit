@@ -48,6 +48,7 @@ namespace SplashEdit.RuntimeCode
 
         [Tooltip("Mark as platform: all boundary edges of nav regions from this mesh allow walkoff. Agent radius is not enforced at the edges.")]
         [SerializeField] private bool isPlatform = false;
+        [SerializeField] private int uvOffsetMaterial = 0;
 
         public PSXBPP BitDepth => bitDepth;
         public PSXCollisionType CollisionType => collisionType;
@@ -55,6 +56,7 @@ namespace SplashEdit.RuntimeCode
         public Color32 FlatVertexColor => flatVertexColor;
         public bool SmoothNormals => smoothNormals;
         public bool IsPlatform => isPlatform;
+        public int UVOffsetMaterial => uvOffsetMaterial;
 
         private readonly Dictionary<(int, PSXBPP), PSXTexture2D> cache = new();
 
