@@ -585,7 +585,7 @@ namespace SplashEdit.RuntimeCode
                             writer.Write((ushort)tpage.info);
                             writer.Write((ushort)tex.ClutPackingX);
                             writer.Write((ushort)tex.ClutPackingY);
-                            writer.Write(flags); // padding
+                            writer.Write(flags); // flags
                         }
                     }
                 }
