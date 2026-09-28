@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using System.Threading;
@@ -16,12 +15,15 @@ namespace SplashEdit.EditorCode
     {
         private const string WINDOW_TITLE = "PSX Console";
         private const string MENU_PATH = "PlayStation 1/PSX Console";
-        private const int MAX_LINES = 2000;
-        private const int TRIM_AMOUNT = 500;
+        private const int CAPACITY = 2000;
 
         // ── Shared state (set by SplashControlPanel) ──
         private static Process _process;
-        private static readonly List<LogLine> _lines = new List<LogLine>();
+        // Fixed-size ring buffer. Writers append at _head (wrapped with % CAPACITY)
+        // The retained lines are the _count lines at indices [_head - _count, _head), oldest first.
+        private static readonly LogLine[] _buffer = new LogLine[CAPACITY];
+        private static long _head;
+        private static int _count;
         private static readonly object _lock = new object();
         private static volatile bool _autoScroll = true;
         private static volatile bool _reading;
@@ -38,8 +40,8 @@ namespace SplashEdit.EditorCode
         private int _lastLineCount;
 
         // ── Selection state (for shift-click range and right-click copy) ──
-        private int _selectionAnchor = -1;  // first clicked line index (into _lines)
-        private int _selectionEnd = -1;     // last shift-clicked line index (into _lines)
+        private int _selectionAnchor = -1;  // first clicked line index (into drawn range)
+        private int _selectionEnd = -1;     // last shift-clicked line index (into drawn range)
 
         private struct LogLine
         {
@@ -75,20 +77,17 @@ namespace SplashEdit.EditorCode
 
             lock (_lock)
             {
-                _lines.Add(new LogLine
+                _buffer[(int)(_head % CAPACITY)] = new LogLine
                 {
                     text = text,
                     isError = isError,
                     timestamp = DateTime.Now.ToString("HH:mm:ss.fff")
-                });
-
-                if (_lines.Count > MAX_LINES)
-                {
-                    _lines.RemoveRange(0, TRIM_AMOUNT);
-                }
+                };
+                _head++;
+                if (_count < CAPACITY) _count++;
             }
 
-            // Repaint is handled by OnEditorUpdate polling _lines.Count changes.
+            // Repaint is handled by OnEditorUpdate polling _count changes.
             // Do NOT call EditorApplication.delayCall here - AddLine is called
             // from background threads (serial host, process readers) and
             // delayCall is not thread-safe. It kills the calling thread.
@@ -142,21 +141,7 @@ namespace SplashEdit.EditorCode
                         string line = reader.ReadLine();
                         if (line == null) break;
 
-                        lock (_lock)
-                        {
-                            _lines.Add(new LogLine
-                            {
-                                text = line,
-                                isError = isError,
-                                timestamp = DateTime.Now.ToString("HH:mm:ss.fff")
-                            });
-
-                            // Trim if too many lines
-                            if (_lines.Count > MAX_LINES)
-                            {
-                                _lines.RemoveRange(0, TRIM_AMOUNT);
-                            }
-                        }
+                        AddLine(line, isError);
                     }
                 }
                 catch (Exception)
@@ -189,7 +174,7 @@ namespace SplashEdit.EditorCode
         {
             // Repaint when new lines arrive
             int count;
-            lock (_lock) { count = _lines.Count; }
+            lock (_lock) { count = _count; }
             if (count != _lastLineCount)
             {
                 _lastLineCount = count;
@@ -247,22 +232,24 @@ namespace SplashEdit.EditorCode
             return tex;
         }
 
-        // Snapshot taken at the start of each OnGUI so Layout and Repaint
-        // events always see the same line count (prevents "Getting control
-        // position in a group with only N controls" errors).
-        private LogLine[] _snapshot = Array.Empty<LogLine>();
+        // Draw range captured at the start of each OnGUI so Layout and Repaint
+        // events always draw the same lines (prevents "Getting control position
+        // in a group with only N controls" errors).
+        private long _drawBase;
+        private int _drawCount;
 
         private void OnGUI()
         {
             EnsureStyles();
 
-            // Take a snapshot once per OnGUI so Layout and Repaint see
-            // identical control counts even if background threads add lines.
+            // Capture the draw range once per OnGUI so Layout and Repaint see
+            // identical content even if background threads add lines.
             if (Event.current.type == EventType.Layout)
             {
                 lock (_lock)
                 {
-                    _snapshot = _lines.ToArray();
+                    _drawBase = _head - _count;
+                    _drawCount = _count;
                 }
             }
 
@@ -298,7 +285,7 @@ namespace SplashEdit.EditorCode
             // Clear
             if (GUILayout.Button("Clear", EditorStyles.toolbarButton, GUILayout.Width(45)))
             {
-                lock (_lock) { _lines.Clear(); }
+                lock (_lock) { _head = 0; _count = 0; }
             }
 
             // Copy all
@@ -326,18 +313,16 @@ namespace SplashEdit.EditorCode
             int selMax = Mathf.Max(_selectionAnchor, _selectionEnd);
             bool hasSelection = _selectionAnchor >= 0 && _selectionEnd >= 0;
 
-            // Iterate the snapshot taken during Layout so the control count
-            // is stable across Layout and Repaint events.
-            var snapshot = _snapshot;
-
-            if (snapshot.Length == 0)
+            // Iterate the draw range captured during Layout so the control
+            // count is stable across Layout and Repaint events.
+            if (_drawCount == 0)
             {
                 GUILayout.Label("Waiting for output...", EditorStyles.centeredGreyMiniLabel);
             }
 
-            for (int i = 0; i < snapshot.Length; i++)
+            for (int i = 0; i < _drawCount; i++)
             {
-                var line = snapshot[i];
+                var line = _buffer[(int)((_drawBase + i) % CAPACITY)];
 
                 if (line.isError && !_showStderr) continue;
                 if (!line.isError && !_showStdout) continue;
@@ -379,12 +364,11 @@ namespace SplashEdit.EditorCode
                         }
                         menu.AddItem(new GUIContent("Copy this line"), false, () =>
                         {
-                            string text;
-                            lock (_lock)
+                            string text = string.Empty;
+                            if (clickedLine >= 0 && clickedLine < _drawCount)
                             {
-                                text = clickedLine < _lines.Count
-                                    ? $"[{_lines[clickedLine].timestamp}] {_lines[clickedLine].text}"
-                                    : "";
+                                var line = _buffer[(int)((_drawBase + clickedLine) % CAPACITY)];
+                                text = $"[{line.timestamp}] {line.text}";
                             }
                             EditorGUIUtility.systemCopyBuffer = text;
                         });
@@ -405,15 +389,21 @@ namespace SplashEdit.EditorCode
         private void CopyRange(int fromIndex, int toIndex)
         {
             var sb = new StringBuilder();
+            long baseIdx;
+            int count;
             lock (_lock)
             {
-                int lo = Mathf.Min(fromIndex, toIndex);
-                int hi = Mathf.Max(fromIndex, toIndex);
-                for (int i = lo; i <= hi && i < _lines.Count; i++)
-                {
-                    string prefix = _lines[i].isError ? "[ERR]" : "[OUT]";
-                    sb.AppendLine($"[{_lines[i].timestamp}] {prefix} {_lines[i].text}");
-                }
+                baseIdx = _head - _count;
+                count = _count;
+            }
+
+            int lo = Mathf.Max(0, Mathf.Min(fromIndex, toIndex));
+            int hi = Mathf.Min(Mathf.Max(fromIndex, toIndex), count - 1);
+            for (int i = lo; i <= hi; i++)
+            {
+                var line = _buffer[(int)((baseIdx + i) % CAPACITY)];
+                string prefix = line.isError ? "[ERR]" : "[OUT]";
+                sb.AppendLine($"[{line.timestamp}] {prefix} {line.text}");
             }
             EditorGUIUtility.systemCopyBuffer = sb.ToString();
         }
@@ -421,13 +411,19 @@ namespace SplashEdit.EditorCode
         private void CopyToClipboard()
         {
             var sb = new StringBuilder();
+            long baseIdx;
+            int count;
             lock (_lock)
             {
-                foreach (var line in _lines)
-                {
-                    string prefix = line.isError ? "[ERR]" : "[OUT]";
-                    sb.AppendLine($"[{line.timestamp}] {prefix} {line.text}");
-                }
+                baseIdx = _head - _count;
+                count = _count;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                var line = _buffer[(int)((baseIdx + i) % CAPACITY)];
+                string prefix = line.isError ? "[ERR]" : "[OUT]";
+                sb.AppendLine($"[{line.timestamp}] {prefix} {line.text}");
             }
             EditorGUIUtility.systemCopyBuffer = sb.ToString();
         }
