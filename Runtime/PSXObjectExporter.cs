@@ -19,15 +19,13 @@ namespace SplashEdit.RuntimeCode
         MeshVertexColors = 2
     }
 
-    [RequireComponent(typeof(MeshFilter))]
-    [RequireComponent(typeof(MeshRenderer))]
     [Icon("Packages/net.psxsplash.splashedit/Icons/PSXObjectExporter.png")]
     public class PSXObjectExporter : MonoBehaviour, IPSXExportable
     {
         public LuaFile LuaFile => luaFile;
 
         [FormerlySerializedAs("IsActive")]
-        [SerializeField] private bool isActive = true; 
+        [SerializeField] private bool isActive = true;
         public bool IsActive => isActive;
 
         public List<PSXTexture2D> Textures { get; set; } = new List<PSXTexture2D>();
@@ -119,6 +117,8 @@ namespace SplashEdit.RuntimeCode
         public void CreatePSXMesh(float GTEScaling)
         {
             Renderer renderer = GetComponent<Renderer>();
+            Mesh = new PSXMesh { Triangles = new List<Tri>() };
+
             if (renderer != null)
             {
                 Mesh = PSXMesh.CreateFromUnityRenderer(renderer, GTEScaling, transform, Textures, vertexColorMode, flatVertexColor, smoothNormals);

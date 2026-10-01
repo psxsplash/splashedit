@@ -409,7 +409,8 @@ namespace SplashEdit.RuntimeCode
                         for (int c = 0; c < 3; c++)
                             writer.Write((int)rot[r, c]);
 
-                    writer.Write((ushort)exporter.Mesh.Triangles.Count);
+                    int triangleCount = exporter.Mesh?.Triangles?.Count ?? 0;
+                    writer.Write((ushort)triangleCount);
 
                     if (exporter.LuaFile != null)
                         writer.Write((short)luaFiles.IndexOf(exporter.LuaFile));
@@ -700,9 +701,10 @@ namespace SplashEdit.RuntimeCode
                 {
                     AlignToFourBytes(writer);
                     meshOffset.DataOffsets.Add(writer.BaseStream.Position);
-                    totalFaces += exporter.Mesh.Triangles.Count;
+                    int exporterTriangleCount = exporter.Mesh?.Triangles?.Count ?? 0;
+                    totalFaces += exporterTriangleCount;
 
-                    foreach (Tri tri in exporter.Mesh.Triangles)
+                    foreach (Tri tri in exporter.Mesh?.Triangles ?? new List<Tri>())
                     {
                         // Vertex positions (3 x 6 bytes)
                         WriteVertexPosition(writer, tri.v0);
@@ -814,7 +816,7 @@ namespace SplashEdit.RuntimeCode
                         writer.Write((byte)name.Length);
                         audioNameOffsetPositions.Add(writer.BaseStream.Position);
                         writer.Write((uint)0);  // nameOffset placeholder
-                        audioClipNames.Add(name); 
+                        audioClipNames.Add(name);
                     }
 
                     // Phase 2: Write name strings (after all metadata entries)

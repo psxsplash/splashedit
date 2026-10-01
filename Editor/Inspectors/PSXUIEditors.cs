@@ -179,8 +179,6 @@ namespace SplashEdit.EditorCode
             Color fill = new Color(0, 0, 0, selected ? 0.6f : 0.4f);
             Handles.DrawSolidRectangleWithOutline(corners, fill, borderColor);
 
-            string label = string.IsNullOrEmpty(text.DefaultText) ? "[empty]" : text.DefaultText;
-
             PSXFontAsset font = text.GetEffectiveFont();
             int glyphW = font != null ? font.GlyphWidth : 8;
             int glyphH = font != null ? font.GlyphHeight : 16;
@@ -201,42 +199,74 @@ namespace SplashEdit.EditorCode
             Color tintColor = text.TextColor;
             tintColor.a = selected ? 1f : 0.8f;
 
+            var layout = text.GetWrappedLayout(font, glyphW, glyphH, psxPixelScale, guiW);
+            float startY = guiY;
+            if (layout.BlockHeight < guiH)
+            {
+                switch (text.VerticalAlignment)
+                {
+                    case PSXTextVerticalAlignment.CenterY:
+                        startY = guiY + (guiH - layout.BlockHeight) * 0.5f;
+                        break;
+                    case PSXTextVerticalAlignment.BottomY:
+                        startY = guiY + guiH - layout.BlockHeight;
+                        break;
+                }
+            }
+
             if (font != null && font.FontTexture != null && font.SourceFont != null)
             {
                 Texture2D fontTex = font.FontTexture;
                 int glyphsPerRow = font.GlyphsPerRow;
                 float cellScreenH = glyphH * psxPixelScale;
 
-                float cursorX = guiX;
                 GUI.color = tintColor;
-                foreach (char ch in label)
+                for (int lineIndex = 0; lineIndex < layout.Lines.Length; lineIndex++)
                 {
-                    if (ch < 32 || ch > 126) continue;
-                    int charIdx = ch - 32;
-                    int col = charIdx % glyphsPerRow;
-                    int row = charIdx / glyphsPerRow;
-
-                    float advance = glyphW;
-                    if (font.AdvanceWidths != null && charIdx < font.AdvanceWidths.Length)
-                        advance = font.AdvanceWidths[charIdx];
-
-                    if (ch != ' ')
+                    string line = layout.Lines[lineIndex];
+                    float lineWidth = text.MeasureLineWidth(line, font, glyphW, psxPixelScale);
+                    float currentX = guiX;
+                    switch (text.HorizontalAlignment)
                     {
-                        float uvX = (float)(col * glyphW) / fontTex.width;
-                        float uvY = 1f - (float)((row + 1) * glyphH) / fontTex.height;
-                        float uvW = (float)glyphW / fontTex.width;
-                        float uvH = (float)glyphH / fontTex.height;
-
-                        float spriteScreenW = advance * psxPixelScale;
-                        Rect screenRect = new Rect(cursorX, guiY, spriteScreenW, cellScreenH);
-                        float uvWScaled = uvW * (advance / glyphW);
-                        Rect uvRect = new Rect(uvX, uvY, uvWScaled, uvH);
-
-                        if (screenRect.xMax > guiX && screenRect.x < guiX + guiW)
-                            GUI.DrawTextureWithTexCoords(screenRect, fontTex, uvRect);
+                        case PSXTextHorizontalAlignment.CenterX:
+                            currentX = guiX + (guiW - lineWidth) * 0.5f;
+                            break;
+                        case PSXTextHorizontalAlignment.RightX:
+                            currentX = guiX + guiW - lineWidth;
+                            break;
                     }
 
-                    cursorX += advance * psxPixelScale;
+                    float currentY = startY + lineIndex * layout.LineHeight;
+                    float cursorX = currentX;
+                    foreach (char ch in line)
+                    {
+                        if (ch < 32 || ch > 126) continue;
+                        int charIdx = ch - 32;
+                        int col = charIdx % glyphsPerRow;
+                        int row = charIdx / glyphsPerRow;
+
+                        float advance = glyphW;
+                        if (font.AdvanceWidths != null && charIdx < font.AdvanceWidths.Length)
+                            advance = font.AdvanceWidths[charIdx];
+
+                        if (ch != ' ')
+                        {
+                            float uvX = (float)(col * glyphW) / fontTex.width;
+                            float uvY = 1f - (float)((row + 1) * glyphH) / fontTex.height;
+                            float uvW = (float)glyphW / fontTex.width;
+                            float uvH = (float)glyphH / fontTex.height;
+
+                            float spriteScreenW = advance * psxPixelScale;
+                            Rect screenRect = new Rect(cursorX, currentY, spriteScreenW, cellScreenH);
+                            float uvWScaled = uvW * (advance / glyphW);
+                            Rect uvRect = new Rect(uvX, uvY, uvWScaled, uvH);
+
+                            if (screenRect.xMax > guiX && screenRect.x < guiX + guiW)
+                                GUI.DrawTextureWithTexCoords(screenRect, fontTex, uvRect);
+                        }
+
+                        cursorX += advance * psxPixelScale;
+                    }
                 }
                 GUI.color = Color.white;
             }
@@ -245,14 +275,41 @@ namespace SplashEdit.EditorCode
                 int fSize = Mathf.Clamp(Mathf.RoundToInt(glyphH * psxPixelScale * 0.75f), 6, 72);
                 GUIStyle style = new GUIStyle(EditorStyles.label);
                 style.normal.textColor = tintColor;
-                style.alignment = TextAnchor.UpperLeft;
                 style.fontSize = fSize;
                 style.wordWrap = false;
                 style.clipping = TextClipping.Clip;
 
-                Rect guiRect = new Rect(guiX, guiY, guiW, guiH);
-                GUI.color = tintColor;
-                GUI.Label(guiRect, label, style);
+                TextAnchor anchor = TextAnchor.UpperLeft;
+                switch (text.HorizontalAlignment)
+                {
+                    case PSXTextHorizontalAlignment.CenterX:
+                        anchor = TextAnchor.UpperCenter;
+                        break;
+                    case PSXTextHorizontalAlignment.RightX:
+                        anchor = TextAnchor.UpperRight;
+                        break;
+                }
+                style.alignment = anchor;
+
+                for (int lineIndex = 0; lineIndex < layout.Lines.Length; lineIndex++)
+                {
+                    string line = layout.Lines[lineIndex];
+                    float lineWidth = text.MeasureLineWidth(line, font, glyphW, psxPixelScale);
+                    float currentX = guiX;
+                    switch (text.HorizontalAlignment)
+                    {
+                        case PSXTextHorizontalAlignment.CenterX:
+                            currentX = guiX + (guiW - lineWidth) * 0.5f;
+                            break;
+                        case PSXTextHorizontalAlignment.RightX:
+                            currentX = guiX + guiW - lineWidth;
+                            break;
+                    }
+
+                    Rect guiRect = new Rect(currentX, startY + lineIndex * layout.LineHeight, lineWidth, layout.LineHeight);
+                    GUI.color = tintColor;
+                    GUI.Label(guiRect, line, style);
+                }
                 GUI.color = Color.white;
             }
             Handles.EndGUI();
@@ -479,6 +536,12 @@ namespace SplashEdit.EditorCode
                 "Text render color."));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("fontOverride"), new GUIContent("Font Override",
                 "Custom font for this text element. If empty, uses the canvas default font or built-in system font (8x16)."));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("wrapText"), new GUIContent("TextWrapped",
+                "Automatically wrap text onto additional lines when it exceeds the element width."));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("horizontalAlignment"), new GUIContent("TextXAlignment",
+                "How each wrapped line is aligned within the element bounds."));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("verticalAlignment"), new GUIContent("TextYAlignment",
+                "How the full wrapped text block is aligned within the element bounds."));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("startVisible"));
             PSXEditorStyles.EndCard();
 

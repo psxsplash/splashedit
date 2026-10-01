@@ -97,7 +97,7 @@ namespace SplashEdit.EditorCode
         {
             if (meshFilter == null || meshFilter.sharedMesh == null)
             {
-                EditorGUILayout.LabelField("No mesh on this object.", PSXEditorStyles.InfoBox);
+                EditorGUILayout.LabelField("No Mesh Filter or mesh was found on this object. Lua-only export is still valid, but geometry will be skipped.", PSXEditorStyles.InfoBox);
                 return;
             }
 
@@ -128,28 +128,36 @@ namespace SplashEdit.EditorCode
 
             EditorGUI.indentLevel++;
 
-            EditorGUILayout.PropertyField(bitDepthProp, new GUIContent("Bit Depth"));
-
-            EditorGUILayout.PropertyField(smoothNormalsProp, new GUIContent("Smooth Normals",
-                "Smooth normals for lighting. Disable for flat/faceted shading."));
-
-            EditorGUILayout.PropertyField(vertexColorModeProp, new GUIContent("Vertex Colors"));
-            var vcMode = (VertexColorMode)vertexColorModeProp.enumValueIndex;
-            if (vcMode == VertexColorMode.FlatColor)
+            if (meshFilter != null && meshFilter.sharedMesh != null)
             {
-                EditorGUILayout.PropertyField(flatVertexColorProp, new GUIContent("Flat Color"));
-            }
-            else if (vcMode == VertexColorMode.MeshVertexColors)
-            {
-                var exporter = target as PSXObjectExporter;
-                var mf = exporter.GetComponent<MeshFilter>();
-                if (mf != null && mf.sharedMesh != null && (mf.sharedMesh.colors == null || mf.sharedMesh.colors.Length == 0))
+                EditorGUILayout.PropertyField(bitDepthProp, new GUIContent("Bit Depth"));
+
+                EditorGUILayout.PropertyField(smoothNormalsProp, new GUIContent("Smooth Normals",
+                    "Smooth normals for lighting. Disable for flat/faceted shading."));
+
+                EditorGUILayout.PropertyField(vertexColorModeProp, new GUIContent("Vertex Colors"));
+                var vcMode = (VertexColorMode)vertexColorModeProp.enumValueIndex;
+                if (vcMode == VertexColorMode.FlatColor)
                 {
-                    EditorGUILayout.HelpBox("This mesh has no vertex colors. Will fall back to gray (128,128,128).", MessageType.Warning);
+                    EditorGUILayout.PropertyField(flatVertexColorProp, new GUIContent("Flat Color"));
                 }
+                else if (vcMode == VertexColorMode.MeshVertexColors)
+                {
+                    var exporter = target as PSXObjectExporter;
+                    var mf = exporter.GetComponent<MeshFilter>();
+                    if (mf != null && mf.sharedMesh != null && (mf.sharedMesh.colors == null || mf.sharedMesh.colors.Length == 0))
+                    {
+                        EditorGUILayout.HelpBox("This mesh has no vertex colors. Will fall back to gray (128,128,128).", MessageType.Warning);
+                    }
+                }
+
+                EditorGUILayout.PropertyField(uvOffsetMaterialProp, new GUIContent("UV Offset Material"));
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("This object has no mesh. Add a Mesh Filter to use a Lua script for script-only behavior.", MessageType.Warning);
             }
 
-            EditorGUILayout.PropertyField(uvOffsetMaterialProp, new GUIContent("UV Offset Material"));
             EditorGUILayout.PropertyField(luaFileProp, new GUIContent("Lua Script"));
 
             if (luaFileProp.objectReferenceValue != null)
