@@ -135,7 +135,7 @@ namespace SplashEdit.RuntimeCode
         /// With this on, palette entry 0 is the PS1's transparent colour
         /// (0x0000) and every pixel below the alpha threshold maps to it. Costs
         /// one palette entry. At 16bpp those pixels are written as 0x0000
-        /// directly.
+        /// directly, with or without this.
         /// </param>
         public static PSXTexture2D CreateFromTexture2D(Texture2D inputTexture, PSXBPP bitDepth, bool cutout = false)
         {
@@ -165,10 +165,11 @@ namespace SplashEdit.RuntimeCode
                     {
                         Color pixel = inputTexture.GetPixel(x, height - y - 1);
 
-                        // Cutout at 16bpp: anything below the threshold becomes the
-                        // PS1's transparent colour, the same rule the paletted path
-                        // applies through palette entry 0.
-                        if (cutout && pixel.a < TextureQuantizer.CutoutAlphaThreshold)
+                        // At 16bpp, anything below the alpha threshold becomes the
+                        // PS1's transparent colour, cutout or not. The importer has
+                        // Alpha Is Transparency on, which fills transparent texels
+                        // with the neighbouring colour, so their RGB says nothing.
+                        if (pixel.a < TextureQuantizer.CutoutAlphaThreshold)
                         {
                             psxTex.ImageData[x, y] = new VRAMPixel();
                             continue;
