@@ -1723,8 +1723,10 @@ namespace SplashEdit.RuntimeCode
 
         private static void WriteVertexUV(BinaryWriter w, PSXVertex v, PSXTexture2D t, int expander)
         {
-            w.Write((byte)(v.u + t.PackingX * expander));
-            w.Write((byte)(v.v + t.PackingY));
+            // A texture ending at the page's right or bottom edge puts its far
+            // edge at 256, which a byte cannot hold.
+            w.Write((byte)Math.Min(v.u + t.PackingX * expander, 255));
+            w.Write((byte)Math.Min(v.v + t.PackingY, 255));
         }
 
         private static void WriteObjectAABB(BinaryWriter writer, PSXObjectExporter exporter, float gte)
