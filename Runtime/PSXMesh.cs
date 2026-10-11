@@ -259,9 +259,11 @@ namespace SplashEdit.RuntimeCode
                 ny = PSXTrig.ConvertCoordinateToPSX(-normal.y),
                 nz = PSXTrig.ConvertCoordinateToPSX(normal.z),
 
-                // Map UV coordinates to a byte range after scaling based on texture dimensions.
-                u = (byte)Mathf.Clamp(uv.x * (width - 1), 0, 255),
-                v = (byte)Mathf.Clamp((1.0f - uv.y) * (height - 1), 0, 255),
+                // Unity UVs run from texel edge to texel edge, and the GPU samples
+                // texel u at integer u and leaves out the right and bottom edge, so
+                // k/width maps to texel k and 1.0 to width.
+                u = (byte)Mathf.Clamp(Mathf.RoundToInt(uv.x * width), 0, 255),
+                v = (byte)Mathf.Clamp(Mathf.RoundToInt((1.0f - uv.y) * height), 0, 255),
 
                 // Apply lighting to the colors.
                 r = Utils.ColorUnityToPSX(color.r),
