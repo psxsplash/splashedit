@@ -11,6 +11,7 @@ namespace SplashEdit.EditorCode
     {
         private SerializedProperty isActiveProp;
         private SerializedProperty bitDepthProp;
+        private SerializedProperty uvModeProp;
         private SerializedProperty luaFileProp;
         private SerializedProperty collisionTypeProp;
         private SerializedProperty vertexColorModeProp;
@@ -32,6 +33,7 @@ namespace SplashEdit.EditorCode
         {
             isActiveProp = serializedObject.FindProperty("isActive");
             bitDepthProp = serializedObject.FindProperty("bitDepth");
+            uvModeProp = serializedObject.FindProperty("uvMode");
             luaFileProp = serializedObject.FindProperty("luaFile");
             collisionTypeProp = serializedObject.FindProperty("collisionType");
             vertexColorModeProp = serializedObject.FindProperty("vertexColorMode");
@@ -134,6 +136,11 @@ namespace SplashEdit.EditorCode
             EditorGUI.indentLevel++;
 
             EditorGUILayout.PropertyField(bitDepthProp, new GUIContent("Bit Depth"));
+            EditorGUILayout.PropertyField(uvModeProp, new GUIContent("UV Mode",
+                "Exact: each UV maps to the texel edge it sits on, and the PS1 draws the texture half a texel " +
+                "left of and above where Unity draws it. Half-texel bleed: the vertices at each triangle's smallest U " +
+                "and V move one texel down, so half of the texel outside the UV shows on every side and nothing inside " +
+                "is cut. For atlas tiles with a bleed border, one tile per face."));
 
             EditorGUILayout.PropertyField(smoothNormalsProp, new GUIContent("Smooth Normals",
                 "Smooth normals for lighting. Disable for flat/faceted shading."));

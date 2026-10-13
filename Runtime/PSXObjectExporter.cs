@@ -28,6 +28,13 @@ namespace SplashEdit.RuntimeCode
         OnSmooth = 3  // always lit, per vertex rather than per triangle: smoother, about 9x the cost
     }
 
+    public enum PSXUVMode
+    {
+        Exact = 0,
+        [InspectorName("Half-texel bleed")]
+        HalfTexelBleed = 1  // low-side vertices of each triangle move one texel down
+    }
+
     [RequireComponent(typeof(MeshFilter))]
     [RequireComponent(typeof(MeshRenderer))]
     [Icon("Packages/net.psxsplash.splashedit/Icons/PSXObjectExporter.png")]
@@ -44,6 +51,13 @@ namespace SplashEdit.RuntimeCode
 
         [FormerlySerializedAs("BitDepth")]
         [SerializeField] private PSXBPP bitDepth = PSXBPP.TEX_8BIT;
+
+        [Tooltip("Exact maps each UV to the texel edge it sits on; the PS1 then draws the texture half a texel " +
+                 "left of and above where Unity draws it. Half-texel bleed moves the vertices at each triangle's " +
+                 "smallest U and V one texel down, so half of the texel outside the UV shows on every side and " +
+                 "nothing inside is cut. Meant for atlas tiles with a bleed border, one tile per face.")]
+        [SerializeField] private PSXUVMode uvMode = PSXUVMode.Exact;
+
         [SerializeField] private LuaFile luaFile;
 
         [FormerlySerializedAs("collisionType")]
@@ -66,6 +80,7 @@ namespace SplashEdit.RuntimeCode
         [SerializeField] private int uvOffsetMaterial = 0;
 
         public PSXBPP BitDepth => bitDepth;
+        public PSXUVMode UVMode => uvMode;
         public PSXCollisionType CollisionType => collisionType;
         public VertexColorMode ColorMode => vertexColorMode;
         public Color32 FlatVertexColor => flatVertexColor;
@@ -190,7 +205,7 @@ namespace SplashEdit.RuntimeCode
             if (renderer != null)
             {
                 Mesh = PSXMesh.CreateFromUnityRenderer(renderer, GTEScaling, transform, Textures, vertexColorMode, flatVertexColor, smoothNormals,
-                    bakePointLights: !IsDynamicLit);
+                    bakePointLights: !IsDynamicLit, uvMode: uvMode);
             }
         }
     }

@@ -89,10 +89,10 @@ namespace SplashEdit.RuntimeCode
         /// <param name="bakePointLights">False when the mesh is lit at runtime, which leaves runtime (Realtime or Mixed) point lights out of the bake.</param>
         public static PSXMesh CreateFromUnityRenderer(Renderer renderer, float GTEScaling, Transform transform, List<PSXTexture2D> textures,
             VertexColorMode colorMode = VertexColorMode.BakedLighting, Color32? flatColor = null, bool smoothNormals = true,
-            bool bakePointLights = true)
+            bool bakePointLights = true, PSXUVMode uvMode = PSXUVMode.Exact)
         {
             Mesh mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
-            return BuildFromMesh(mesh, renderer, GTEScaling, transform, textures, colorMode, flatColor, smoothNormals, bakePointLights);
+            return BuildFromMesh(mesh, renderer, GTEScaling, transform, textures, colorMode, flatColor, smoothNormals, bakePointLights, uvMode);
         }
 
         /// <summary>
@@ -106,7 +106,7 @@ namespace SplashEdit.RuntimeCode
 
         private static PSXMesh BuildFromMesh(Mesh mesh, Renderer renderer, float GTEScaling, Transform transform, List<PSXTexture2D> textures,
             VertexColorMode colorMode = VertexColorMode.BakedLighting, Color32? flatColor = null, bool smoothNormals = true,
-            bool bakePointLights = true)
+            bool bakePointLights = true, PSXUVMode uvMode = PSXUVMode.Exact)
         {
             PSXMesh psxMesh = new PSXMesh { Triangles = new List<Tri>() };
             Material[] materials = renderer.sharedMaterials;
@@ -219,17 +219,46 @@ namespace SplashEdit.RuntimeCode
                         (vid1, vid2) = (vid2, vid1);
                     }
 
-                    psxMesh.Triangles.Add(new Tri
+                    var tri = new Tri
                     {
                         v0 = convertData(vid0),
                         v1 = convertData(vid1),
                         v2 = convertData(vid2),
                         TextureIndex = textureIndex
-                    });
+                    };
+                    if (uvMode == PSXUVMode.HalfTexelBleed && textureIndex != -1)
+                        BleedHalfTexel(ref tri);
+                    psxMesh.Triangles.Add(tri);
                 }
             }
 
             return psxMesh;
+        }
+
+        /// <summary>
+        /// The GPU samples texel floor(u + 0.5), so a span from k0 to k1 shows half of
+        /// texel k0, all of k0 + 1 to k1 - 1 and half of texel k1. Starting it at k0 - 1
+        /// instead shows all of k0 to k1 - 1 plus half a texel past each end. Vertices
+        /// are per triangle, so this never moves a neighbouring triangle's copy.
+        /// </summary>
+        private static void BleedHalfTexel(ref Tri tri)
+        {
+            byte minU = (byte)Mathf.Min(tri.v0.u, tri.v1.u, tri.v2.u);
+            byte maxU = (byte)Mathf.Max(tri.v0.u, tri.v1.u, tri.v2.u);
+            byte minV = (byte)Mathf.Min(tri.v0.v, tri.v1.v, tri.v2.v);
+            byte maxV = (byte)Mathf.Max(tri.v0.v, tri.v1.v, tri.v2.v);
+            if (minU < maxU && minU > 0)
+            {
+                if (tri.v0.u == minU) tri.v0.u--;
+                if (tri.v1.u == minU) tri.v1.u--;
+                if (tri.v2.u == minU) tri.v2.u--;
+            }
+            if (minV < maxV && minV > 0)
+            {
+                if (tri.v0.v == minV) tri.v0.v--;
+                if (tri.v1.v == minV) tri.v1.v--;
+                if (tri.v2.v == minV) tri.v2.v--;
+            }
         }
 
         /// <summary>
