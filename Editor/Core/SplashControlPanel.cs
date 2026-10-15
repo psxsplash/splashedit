@@ -56,6 +56,7 @@ namespace SplashEdit.EditorCode
         // ----- Toolchain Cache -----
         private bool _hasMIPS;
         private bool _hasMake;
+        private bool _hasXMake;
         private bool _hasRedux;
         private bool _hasNativeProject;
         private bool _hasPsxavenc;
@@ -464,6 +465,23 @@ namespace SplashEdit.EditorCode
                     ToolchainInstaller.PromptXcodeInstall();
                 EditorGUILayout.EndHorizontal();
             }
+
+            PSXEditorStyles.DrawSeparator(2, 2);
+
+            // xmake (optional: the engine builds with it when present, with Make otherwise)
+            EditorGUILayout.BeginHorizontal();
+            DrawStatusIcon(_hasXMake);
+            GUILayout.Label("xmake", GUILayout.Width(160));
+            GUILayout.FlexibleSpace();
+            if (_hasXMake)
+            {
+                PSXEditorStyles.DrawStatusBadge("Ready", PSXEditorStyles.Success);
+            }
+            else if (GUILayout.Button("Install", PSXEditorStyles.SecondaryButton, GUILayout.Width(70)))
+            {
+                InstallXMake();
+            }
+            EditorGUILayout.EndHorizontal();
 
             PSXEditorStyles.DrawSeparator(2, 2);
 
@@ -1584,13 +1602,19 @@ namespace SplashEdit.EditorCode
 
         // FEATURES= for make, from the last export. Without one the engine is
         // built whole.
-        private static string EngineFeaturesArg()
+        private static string EngineFeaturesValue()
         {
             string path = SplashBuildPaths.EngineFeaturesPath;
             if (!File.Exists(path)) return "";
             string value = File.ReadLines(path).FirstOrDefault()?.Trim();
             if (string.IsNullOrEmpty(value)) return "";
-            return " FEATURES=" + value.Replace(' ', ',');
+            return value.Replace(' ', ',');
+        }
+
+        private static string EngineFeaturesArg()
+        {
+            string value = EngineFeaturesValue();
+            return value.Length == 0 ? "" : " FEATURES=" + value;
         }
 
         /// <summary>
@@ -2076,6 +2100,9 @@ namespace SplashEdit.EditorCode
                 return false;
             }
 
+            if (XMakeBuild.CanBuild(nativeDir))
+                return await CompileNativeWithXMakeAsync(nativeDir);
+
             if (!ShortPath.TryResolveForMake(nativeDir, out string nativeWorkDir, out string pathError))
             {
                 Log(pathError, LogType.Error);
@@ -2194,6 +2221,97 @@ namespace SplashEdit.EditorCode
                 Log($"Compile error: {ex.Message}", LogType.Error);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Builds the engine with xmake: configure, then build, each run as an
+        /// argument list with no shell in between.
+        /// </summary>
+        private async Task<bool> CompileNativeWithXMakeAsync(string nativeDir)
+        {
+            string xmake = XMakeBuild.FindXMake();
+            int jobCount = Math.Max(1, SystemInfo.processorCount - 1);
+
+            var steps = new List<List<string>>();
+            if (SplashSettings.CleanBuild)
+                steps.Add(XMakeBuild.CleanArgs(nativeDir));
+            steps.Add(XMakeBuild.ConfigureArgs(nativeDir, EngineFeaturesValue(), _luaBytecodeCompiled));
+            steps.Add(XMakeBuild.BuildArgs(nativeDir, jobCount));
+
+            var logText = new System.Text.StringBuilder();
+            foreach (var args in steps)
+            {
+                Log($"Running: xmake {string.Join(" ", args)}", LogType.Log);
+                var psi = new ProcessStartInfo
+                {
+                    FileName = xmake,
+                    WorkingDirectory = nativeDir,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                foreach (string a in args) psi.ArgumentList.Add(a);
+                if (Application.platform == RuntimePlatform.OSXEditor)
+                {
+                    string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    psi.Environment["PATH"] =
+                        $"{home}/mipsel-none-elf/bin:{home}/bin:/opt/homebrew/bin:/usr/local/bin:" +
+                        psi.Environment["PATH"];
+                }
+
+                try
+                {
+                    var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+                    var stdoutBuf = new System.Text.StringBuilder();
+                    var stderrBuf = new System.Text.StringBuilder();
+                    process.OutputDataReceived += (s, e) => { if (e.Data != null) stdoutBuf.AppendLine(e.Data); };
+                    process.ErrorDataReceived += (s, e) => { if (e.Data != null) stderrBuf.AppendLine(e.Data); };
+
+                    var tcs = new TaskCompletionSource<int>();
+                    process.Exited += (s, e) => tcs.TrySetResult(process.ExitCode);
+                    process.Start();
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+                    int exitCode = await tcs.Task;
+                    process.Dispose();
+
+                    string stdout = stdoutBuf.ToString();
+                    string stderr = stderrBuf.ToString();
+                    logText.Append($"=== xmake {args[0]} STDOUT ===\n{stdout}\n=== STDERR ===\n{stderr}\n");
+
+                    foreach (string line in stdout.Split('\n'))
+                        if (!string.IsNullOrWhiteSpace(line))
+                            LogToPanel(line.Trim(), LogType.Log);
+
+                    if (exitCode != 0)
+                    {
+                        foreach (string line in stderr.Split('\n'))
+                            if (!string.IsNullOrWhiteSpace(line))
+                                LogToPanel(line.Trim(), LogType.Error);
+                        Log($"xmake {args[0]} exited with code {exitCode}", LogType.Error);
+                        File.WriteAllText(SplashBuildPaths.BuildLogPath, logText.ToString());
+                        return false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log($"Compile error: {ex.Message}", LogType.Error);
+                    return false;
+                }
+            }
+
+            string exeSource = Path.Combine(XMakeBuild.OutputDir(nativeDir), "psxsplash.ps-exe");
+            if (File.Exists(exeSource))
+            {
+                File.Copy(exeSource, SplashBuildPaths.CompiledExePath, true);
+                Log("Copied .ps-exe to PSXBuild/", LogType.Log);
+            }
+            else
+            {
+                Log($"Warning: Could not find compiled .ps-exe at {exeSource}", LogType.Warning);
+            }
+            return true;
         }
 
         private string FindCompiledExe(string nativeDir)
@@ -2739,6 +2857,7 @@ namespace SplashEdit.EditorCode
                     : "mipsel-none-elf-gcc");
 
             _hasMake = ToolchainChecker.IsToolAvailable("make");
+            _hasXMake = XMakeBuild.IsAvailable();
 
             string reduxBin = SplashSettings.PCSXReduxPath;
             _hasRedux = !string.IsNullOrEmpty(reduxBin) && File.Exists(reduxBin);
@@ -2796,6 +2915,15 @@ namespace SplashEdit.EditorCode
             {
                 Log($"Make install error: {ex.Message}", LogType.Error);
             }
+            RefreshToolchainStatus();
+            Repaint();
+        }
+
+        private async void InstallXMake()
+        {
+            Log("Installing xmake...", LogType.Log);
+            if (await ToolchainInstaller.InstallXMake())
+                Log("xmake installation complete.", LogType.Log);
             RefreshToolchainStatus();
             Repaint();
         }
