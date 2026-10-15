@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEditor;
 using System.IO;
+using System.Net.Http;
+using System.Runtime.InteropServices;
 
 namespace SplashEdit.EditorCode
 {
@@ -200,6 +202,114 @@ namespace SplashEdit.EditorCode
             finally
             {
                 _installing = false;
+            }
+        }
+
+        [Serializable]
+        private class GitHubAsset
+        {
+            public string name;
+            public string browser_download_url;
+        }
+
+        [Serializable]
+        private class GitHubRelease
+        {
+            public string tag_name;
+            public GitHubAsset[] assets;
+        }
+
+        /// <summary>
+        /// The suffix of xmake's standalone bundle for this machine, or null when
+        /// the project publishes none (Linux on ARM).
+        /// </summary>
+        private static string XMakeBundleSuffix()
+        {
+            Architecture arch = RuntimeInformation.OSArchitecture;
+            switch (Application.platform)
+            {
+                case RuntimePlatform.WindowsEditor:
+                    if (arch == Architecture.X64) return "win64.exe";
+                    if (arch == Architecture.X86) return "win32.exe";
+                    if (arch == Architecture.Arm64) return "arm64.exe";
+                    return null;
+                case RuntimePlatform.LinuxEditor:
+                    return arch == Architecture.X64 ? "linux.x86_64" : null;
+                case RuntimePlatform.OSXEditor:
+                    if (arch == Architecture.X64) return "macos.x86_64";
+                    if (arch == Architecture.Arm64) return "macos.arm64";
+                    return null;
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// Installs xmake. Where the project publishes a standalone bundle, the
+        /// latest one is downloaded to XMakeBuild.ManagedBinary; otherwise the
+        /// system package manager is used.
+        /// </summary>
+        public static async Task<bool> InstallXMake()
+        {
+            string suffix = XMakeBundleSuffix();
+            try
+            {
+                if (suffix == null)
+                {
+                    if (ToolchainChecker.IsToolAvailable("brew"))
+                        await RunCommandAsync("brew", "install xmake");
+                    else if (ToolchainChecker.IsToolAvailable("apt"))
+                        await RunCommandAsync("pkexec", "apt install xmake -y");
+                    else
+                        throw new Exception("No standalone xmake build exists for this platform. Install xmake manually.");
+                    return true;
+                }
+
+                using (var http = new HttpClient())
+                {
+                    http.DefaultRequestHeaders.UserAgent.ParseAdd("SplashEdit/1.0");
+                    string json = await http.GetStringAsync(
+                        "https://api.github.com/repos/xmake-io/xmake/releases/latest");
+                    GitHubRelease release = JsonUtility.FromJson<GitHubRelease>(json);
+
+                    // Match the asset by its exact name: xmake's installer
+                    // (xmake-<tag>.<suffix>) shares the suffix with the bundle.
+                    string wanted = $"xmake-bundle-{release.tag_name}.{suffix}";
+                    string url = null;
+                    foreach (var asset in release.assets)
+                        if (asset.name == wanted) url = asset.browser_download_url;
+                    if (url == null)
+                        throw new Exception($"Could not find {wanted} in the latest xmake release. Install xmake manually.");
+
+                    string destination = XMakeBuild.ManagedBinary;
+                    Directory.CreateDirectory(Path.GetDirectoryName(destination));
+                    EditorUtility.DisplayProgressBar("Downloading xmake", wanted, 0.3f);
+                    byte[] data = await http.GetByteArrayAsync(url);
+                    File.WriteAllBytes(destination, data);
+
+                    if (Application.platform != RuntimePlatform.WindowsEditor)
+                    {
+                        var chmod = new ProcessStartInfo
+                        {
+                            FileName = "chmod",
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        chmod.ArgumentList.Add("775");
+                        chmod.ArgumentList.Add(destination);
+                        Process.Start(chmod)?.WaitForExit();
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                EditorUtility.DisplayDialog("Error", $"xmake installation failed: {ex.Message}", "OK");
+                return false;
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
             }
         }
 
