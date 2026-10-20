@@ -39,6 +39,30 @@ namespace SplashEdit.EditorCode
         private bool _animModeStarted;
         private Dictionary<string, Animator> _skinAnimatorCache = new Dictionary<string, Animator>();
 
+        // Objects driven by tracks, kept by reference: GameObject.Find skips inactive
+        // objects, so an object an ObjectActive track turned off could not be found again.
+        private Dictionary<string, GameObject> _previewObjects = new Dictionary<string, GameObject>();
+
+        private GameObject PreviewObject(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            if (_previewObjects.TryGetValue(name, out var go) && go != null) return go;
+            go = GameObject.Find(name);
+            if (go == null)
+            {
+                foreach (var t in Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                {
+                    if (t.name == name)
+                    {
+                        go = t.gameObject;
+                        break;
+                    }
+                }
+            }
+            if (go != null) _previewObjects[name] = go;
+            return go;
+        }
+
         // PS1 H register / Unity FOV conversion
         private const float PSX_HALF_HEIGHT = 120f;
         private static float HToFOV(float h)
@@ -54,6 +78,7 @@ namespace SplashEdit.EditorCode
         public void StartPreview(PSXTimelineState state)
         {
             _firedAudioEventIndices.Clear();
+            _previewObjects.Clear();
             _savedObjectPositions.Clear();
             _savedObjectRotations.Clear();
             _savedObjectActive.Clear();
@@ -95,7 +120,7 @@ namespace SplashEdit.EditorCode
                             };
                     }
 
-                    var go = GameObject.Find(track.ObjectName);
+                    var go = PreviewObject(track.ObjectName);
                     if (go == null) continue;
 
                     if (!_savedObjectPositions.ContainsKey(track.ObjectName))
@@ -193,7 +218,7 @@ namespace SplashEdit.EditorCode
             // Restore object transforms
             foreach (var kvp in _savedObjectPositions)
             {
-                var go = GameObject.Find(kvp.Key);
+                var go = PreviewObject(kvp.Key);
                 if (go == null) continue;
                 go.transform.position = kvp.Value;
                 if (_savedObjectRotations.ContainsKey(kvp.Key))
@@ -218,6 +243,7 @@ namespace SplashEdit.EditorCode
             _savedObjectRotations.Clear();
             _savedObjectActive.Clear();
             _savedObjectUVOffset.Clear();
+            _previewObjects.Clear();
 
             // Restore lights
             foreach (var kvp in _savedLights)
@@ -276,25 +302,25 @@ namespace SplashEdit.EditorCode
                             break;
                         case PSXTrackType.ObjectPosition:
                         {
-                            var go = GameObject.Find(track.ObjectName);
+                            var go = PreviewObject(track.ObjectName);
                             if (go != null) go.transform.position = val;
                             break;
                         }
                         case PSXTrackType.ObjectRotation:
                         {
-                            var go = GameObject.Find(track.ObjectName);
+                            var go = PreviewObject(track.ObjectName);
                             if (go != null) go.transform.rotation = Quaternion.Euler(val);
                             break;
                         }
                         case PSXTrackType.ObjectActive:
                         {
-                            var go = GameObject.Find(track.ObjectName);
+                            var go = PreviewObject(track.ObjectName);
                             if (go != null) go.SetActive(val.x > 0.5f);
                             break;
                         }
                         case PSXTrackType.ObjectUVOffset:
                         {
-                            var go = GameObject.Find(track.ObjectName);
+                            var go = PreviewObject(track.ObjectName);
                             if (go != null)
                             {
                                 if (go.GetComponent<MeshRenderer>())
