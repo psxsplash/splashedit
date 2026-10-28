@@ -2235,8 +2235,12 @@ namespace SplashEdit.EditorCode
             var steps = new List<List<string>>();
             if (SplashSettings.CleanBuild)
                 steps.Add(XMakeBuild.CleanArgs(nativeDir));
-            steps.Add(XMakeBuild.ConfigureArgs(nativeDir, EngineFeaturesValue(), _luaBytecodeCompiled));
-            steps.Add(XMakeBuild.BuildArgs(nativeDir, jobCount));
+            string features = EngineFeaturesValue();
+            string target = XMakeBuild.EngineTarget(features);
+            if (XMakeBuild.OverlaysDropped())
+                Log("The ISO engine has no overlay build: building it without overlays.", LogType.Warning);
+            steps.Add(XMakeBuild.ConfigureArgs(nativeDir, features, _luaBytecodeCompiled));
+            steps.Add(XMakeBuild.BuildArgs(nativeDir, jobCount, target));
 
             var logText = new System.Text.StringBuilder();
             foreach (var args in steps)
@@ -2301,7 +2305,7 @@ namespace SplashEdit.EditorCode
                 }
             }
 
-            string exeSource = Path.Combine(XMakeBuild.OutputDir(nativeDir), "psxsplash.ps-exe");
+            string exeSource = Path.Combine(XMakeBuild.OutputDir(nativeDir), target + ".ps-exe");
             if (File.Exists(exeSource))
             {
                 File.Copy(exeSource, SplashBuildPaths.CompiledExePath, true);

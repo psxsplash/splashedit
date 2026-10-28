@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 
 namespace SplashEdit.EditorCode
@@ -55,10 +56,6 @@ namespace SplashEdit.EditorCode
             var args = new List<string>
             {
                 "f", "-c", "-y", "-P", nativeDir, "-m", ModeName(),
-                "--loader=" + (SplashSettings.Target == BuildTarget.ISO ? "cdrom" : "pcdrv"),
-                "--memoverlay=" + YesNo(SplashSettings.MemoryOverlay),
-                "--fpsoverlay=" + YesNo(SplashSettings.FpsOverlay),
-                "--roomdebug=" + YesNo(SplashSettings.RoomDebugOverlay),
                 "--profiler=" + YesNo(SplashSettings.ProfilerOverlay),
                 "--noparser=" + YesNo(noparser),
                 "--ot_size=" + SplashSettings.OtSize,
@@ -69,8 +66,40 @@ namespace SplashEdit.EditorCode
             return args;
         }
 
-        public static List<string> BuildArgs(string nativeDir, int jobs) =>
-            new List<string> { "build", "-y", "-j", jobs.ToString(), "-P", nativeDir };
+        /// <summary>
+        /// The engine target for the current settings. psxsplash's xmake.lua has
+        /// one target per build, each with its own file: psxsplash (PCdrv),
+        /// psxsplash-cdrom (ISO), and the PCdrv builds with overlays, -perf (FPS
+        /// counter and heap bar together), -rooms and -perf-rooms. Every name
+        /// ends in -nologo when the features leave out bootlogo. The ISO build
+        /// has no overlay variant.
+        /// </summary>
+        public static string EngineTarget(string features)
+        {
+            string name = "psxsplash";
+            if (SplashSettings.Target == BuildTarget.ISO)
+                name += "-cdrom";
+            else
+            {
+                bool perf = SplashSettings.MemoryOverlay || SplashSettings.FpsOverlay;
+                bool rooms = SplashSettings.RoomDebugOverlay;
+                if (perf && rooms) name += "-perf-rooms";
+                else if (perf) name += "-perf";
+                else if (rooms) name += "-rooms";
+            }
+            if (!string.IsNullOrEmpty(features) &&
+                !features.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries).Contains("bootlogo"))
+                name += "-nologo";
+            return name;
+        }
+
+        /// <summary>True when the settings ask for an overlay the target cannot have.</summary>
+        public static bool OverlaysDropped() =>
+            SplashSettings.Target == BuildTarget.ISO &&
+            (SplashSettings.MemoryOverlay || SplashSettings.FpsOverlay || SplashSettings.RoomDebugOverlay);
+
+        public static List<string> BuildArgs(string nativeDir, int jobs, string target) =>
+            new List<string> { "build", "-y", "-j", jobs.ToString(), "-P", nativeDir, target + ".ps-exe" };
 
         public static List<string> CleanArgs(string nativeDir) =>
             new List<string> { "clean", "-y", "-P", nativeDir };
